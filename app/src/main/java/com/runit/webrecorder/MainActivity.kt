@@ -12,6 +12,7 @@ import android.os.Build
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
+import android.provider.MediaStore
 import android.os.SystemClock
 import android.view.KeyEvent
 import android.view.View
@@ -35,6 +36,7 @@ import android.widget.ProgressBar
 import android.widget.TextView
 import android.widget.Toast
 import androidx.activity.OnBackPressedCallback
+import androidx.activity.result.IntentSenderRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
@@ -116,6 +118,19 @@ class MainActivity : AppCompatActivity() {
     private lateinit var dlCount: TextView
     private lateinit var dlEmpty: TextView
     private lateinit var btnDlSelected: TextView
+    private lateinit var dlTabFound: TextView
+    private lateinit var dlTabSaved: TextView
+    private lateinit var dlFoundHeader: View
+    private lateinit var dlFoundScroll: View
+    private lateinit var libScroll: View
+    private lateinit var libList: LinearLayout
+    private lateinit var libEmpty: TextView
+
+    // Saved videos (library)
+    private var showSaved = false
+    private var askedMedia = false
+    private var pendingDelete: LibItem? = null
+    private val libThumbs = HashMap<Long, Bitmap>()
 
     // Bottom nav
     private lateinit var navIcons: List<ImageView>
@@ -178,6 +193,20 @@ class MainActivity : AppCompatActivity() {
     ) {
         suppressLock = false
         askCapture()
+    }
+
+    private val mediaPermLauncher = registerForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) {
+        suppressLock = false
+        if (showSaved) renderLibrary()
+    }
+
+    private val deleteLauncher = registerForActivityResult(
+        ActivityResultContracts.StartIntentSenderForResult()
+    ) {
+        suppressLock = false
+        renderLibrary()
     }
 
     private val notifLauncher = registerForActivityResult(
@@ -284,6 +313,13 @@ class MainActivity : AppCompatActivity() {
         dlCount = findViewById(R.id.dlCount)
         dlEmpty = findViewById(R.id.dlEmpty)
         btnDlSelected = findViewById(R.id.btnDlSelected)
+        dlTabFound = findViewById(R.id.dlTabFound)
+        dlTabSaved = findViewById(R.id.dlTabSaved)
+        dlFoundHeader = findViewById(R.id.dlFoundHeader)
+        dlFoundScroll = findViewById(R.id.dlFoundScroll)
+        libScroll = findViewById(R.id.libScroll)
+        libList = findViewById(R.id.libList)
+        libEmpty = findViewById(R.id.libEmpty)
 
         navIcons = listOf(
             findViewById<ImageView>(R.id.iconHome),
@@ -350,6 +386,8 @@ class MainActivity : AppCompatActivity() {
         findViewById<View>(R.id.dlBack).setOnClickListener { leaveDownloads() }
         findViewById<View>(R.id.dlSelectAll).setOnClickListener { selectAllVideos() }
         btnDlSelected.setOnClickListener { downloadSelected() }
+        dlTabFound.setOnClickListener { setDlTab(false) }
+        dlTabSaved.setOnClickListener { setDlTab(true) }
 
         // Bottom nav
         findViewById<View>(R.id.navHome).setOnClickListener { goHome() }
@@ -403,7 +441,11 @@ class MainActivity : AppCompatActivity() {
             }
             Screen.BROWSE -> applyPrivateStyle()
             Screen.TABS -> renderTabs()
-            Screen.DOWNLOADS -> renderDownloads()
+            Screen.DOWNLOADS -> {
+                applyDlTab()
+                renderDownloads()
+                if (showSaved) renderLibrary()
+            }
             Screen.SETTINGS -> bindSettings()
             Screen.PLACEHOLDER -> {}
         }
@@ -1121,8 +1163,8 @@ class MainActivity : AppCompatActivity() {
 
     private fun renderDownloads() {
         val items = currentItems()
-        dlCount.text = "${items.size}"
-        dlEmpty.visibility = if (items.isEmpty()) View.VISIBLE else View.GONE
+        if (!showSaved) dlCount.text = "${items.size}"
+        dlEmpty.visibility = if (!showSaved && items.isEmpty()) View.VISIBLE else View.GONE
 
         val ids = items.map { it.id }
         if (ids != shownIds) {
@@ -1161,6 +1203,9 @@ class MainActivity : AppCompatActivity() {
         val done = row.findViewById<ImageView>(R.id.vDone)
         val action = row.findViewById<ImageView>(R.id.vAction)
         val cancel = row.findViewById<ImageView>(R.id.vCancel)
+        val play = row.findViewById<ImageView>(R.id.vPlay)
+        play.visibility = if (item.problem == null && item.state != VideoItem.State.DONE) View.VISIBLE else View.GONE
+        play.setOnClickListener { playItem(item) }
 
         status.setTextColor(color(R.color.vio_accent))
         action.visibility = View.GONE
@@ -1354,6 +1399,159 @@ class MainActivity : AppCompatActivity() {
 
         if (screen == Screen.DOWNLOADS) renderDownloads()
         if (detectCard.visibility == View.VISIBLE) bindDetectCard()
+    }
+
+    // ---------- Player + Saved library ----------
+
+    private fun playItem(item: VideoItem) {
+        val url = item.finalUrl ?: item.url
+        PlayerActivity.start(
+            this,
+            url,
+            item.title,
+            item.kind == VideoItem.Kind.HLS,
+            item.userAgent,
+            item.referer,
+            Http.cookieFor(url)
+        )
+    }
+
+    private fun setDlTab(saved: Boolean) {
+        showSaved = saved
+        applyDlTab()
+        if (saved) {
+            askMediaPermissionOnce()
+            renderLibrary()
+        } else {
+            renderDownloads()
+        }
+    }
+
+    private fun applyDlTab() {
+        dlTabFound.setBackgroundResource(if (!showSaved) R.drawable.bg_chip_on else R.drawable.bg_chip)
+        dlTabFound.setTextColor(color(if (!showSaved) R.color.vio_surface else R.color.vio_text))
+        dlTabSaved.setBackgroundResource(if (showSaved) R.drawable.bg_chip_on else R.drawable.bg_chip)
+        dlTabSaved.setTextColor(color(if (showSaved) R.color.vio_surface else R.color.vio_text))
+        dlFoundHeader.visibility = if (showSaved) View.GONE else View.VISIBLE
+        dlFoundScroll.visibility = if (showSaved) View.GONE else View.VISIBLE
+        libScroll.visibility = if (showSaved) View.VISIBLE else View.GONE
+        btnDlSelected.visibility = if (showSaved) View.GONE else View.VISIBLE
+        if (showSaved) dlEmpty.visibility = View.GONE
+        libEmpty.visibility = View.GONE
+    }
+
+    /** Files saved before a reinstall are only visible with media permission. */
+    private fun askMediaPermissionOnce() {
+        if (askedMedia || Build.VERSION.SDK_INT < 29) return
+        askedMedia = true
+        val perm = if (Build.VERSION.SDK_INT >= 33) {
+            Manifest.permission.READ_MEDIA_VIDEO
+        } else {
+            Manifest.permission.READ_EXTERNAL_STORAGE
+        }
+        if (ContextCompat.checkSelfPermission(this, perm) != PackageManager.PERMISSION_GRANTED) {
+            suppressLock = true
+            mediaPermLauncher.launch(perm)
+        }
+    }
+
+    private fun renderLibrary() {
+        val app = applicationContext
+        Thread {
+            val items = Library.list(app)
+            uiHandler.post { bindLibrary(items) }
+        }.start()
+    }
+
+    private fun bindLibrary(items: List<LibItem>) {
+        if (!showSaved || screen != Screen.DOWNLOADS) return
+        dlCount.text = "${items.size}"
+        libList.removeAllViews()
+        libEmpty.visibility = if (items.isEmpty()) View.VISIBLE else View.GONE
+        for (li in items) {
+            val row = layoutInflater.inflate(R.layout.item_library, libList, false)
+            row.findViewById<TextView>(R.id.lTitle).text = li.name.substringBeforeLast('.')
+            val parts = ArrayList<String>()
+            if (li.size > 0) parts.add(formatSize(li.size))
+            if (li.durationMs > 0) parts.add(formatDuration(li.durationMs))
+            parts.add(li.name.substringAfterLast('.', "").uppercase())
+            row.findViewById<TextView>(R.id.lMeta).text = parts.joinToString(" • ")
+            val thumb = row.findViewById<ImageView>(R.id.lThumb)
+            val cached = libThumbs[li.id]
+            applyThumb(thumb, cached)
+            if (cached == null) {
+                val app = applicationContext
+                Thread {
+                    val bmp = Library.thumb(app, li)
+                    if (bmp != null) {
+                        uiHandler.post {
+                            libThumbs[li.id] = bmp
+                            applyThumb(thumb, bmp)
+                        }
+                    }
+                }.start()
+            }
+            row.setOnClickListener {
+                PlayerActivity.start(this, li.uri.toString(), li.name.substringBeforeLast('.'))
+            }
+            row.findViewById<View>(R.id.lMore).setOnClickListener { showLibMenu(li) }
+            libList.addView(row)
+        }
+    }
+
+    private fun showLibMenu(li: LibItem) {
+        AlertDialog.Builder(this)
+            .setTitle(li.name.substringBeforeLast('.'))
+            .setItems(arrayOf("Play", "Share", "Delete")) { _, which ->
+                when (which) {
+                    0 -> PlayerActivity.start(this, li.uri.toString(), li.name.substringBeforeLast('.'))
+                    1 -> shareLib(li)
+                    else -> confirmDelete(li)
+                }
+            }
+            .setNegativeButton("Cancel", null)
+            .show()
+    }
+
+    private fun shareLib(li: LibItem) {
+        if (li.path != null) {
+            toast("Sharing needs Android 10 or newer")
+            return
+        }
+        val send = Intent(Intent.ACTION_SEND)
+        send.type = "video/*"
+        send.putExtra(Intent.EXTRA_STREAM, li.uri)
+        send.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        startActivity(Intent.createChooser(send, "Share video"))
+    }
+
+    private fun confirmDelete(li: LibItem) {
+        AlertDialog.Builder(this)
+            .setTitle("Delete this video?")
+            .setMessage(li.name)
+            .setPositiveButton("Delete") { _, _ -> deleteLib(li) }
+            .setNegativeButton("Cancel", null)
+            .show()
+    }
+
+    private fun deleteLib(li: LibItem) {
+        if (Library.delete(this, li)) {
+            toast("Deleted")
+            renderLibrary()
+            return
+        }
+        // Files from an earlier install need the user's OK (Android 11+)
+        if (Build.VERSION.SDK_INT >= 30 && li.path == null) {
+            try {
+                val pi = MediaStore.createDeleteRequest(contentResolver, listOf(li.uri))
+                pendingDelete = li
+                suppressLock = true
+                deleteLauncher.launch(IntentSenderRequest.Builder(pi.intentSender).build())
+                return
+            } catch (_: Exception) {
+            }
+        }
+        toast("Couldn't delete this file")
     }
 
     // ---------- Shields ----------

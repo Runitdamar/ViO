@@ -78,6 +78,17 @@
     </LinearLayout>
 
     <ImageView
+        android:id="@+id/vPlay"
+        android:layout_width="36dp"
+        android:layout_height="36dp"
+        android:layout_marginEnd="6dp"
+        android:clickable="true"
+        android:focusable="true"
+        android:padding="9dp"
+        android:src="@drawable/ic_play"
+        android:tint="@color/vio_subtext" />
+
+    <ImageView
         android:id="@+id/vAction"
         android:layout_width="36dp"
         android:layout_height="36dp"

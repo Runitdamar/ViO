@@ -12,12 +12,15 @@ import android.os.Build
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
+import android.os.SystemClock
 import android.view.KeyEvent
 import android.view.View
 import android.view.ViewGroup
 import android.view.inputmethod.EditorInfo
 import android.view.inputmethod.InputMethodManager
+import android.webkit.CookieManager
 import android.webkit.WebChromeClient
+import android.webkit.WebResourceError
 import android.webkit.WebResourceRequest
 import android.webkit.WebResourceResponse
 import android.webkit.WebSettings
@@ -35,6 +38,7 @@ import androidx.activity.OnBackPressedCallback
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
+import androidx.appcompat.widget.SwitchCompat
 import androidx.core.content.ContextCompat
 import org.json.JSONArray
 import org.json.JSONObject
@@ -43,7 +47,7 @@ import java.util.concurrent.atomic.AtomicInteger
 
 class MainActivity : AppCompatActivity() {
 
-    private enum class Screen { HOME, BROWSE, TABS, DOWNLOADS, PLACEHOLDER }
+    private enum class Screen { HOME, BROWSE, TABS, DOWNLOADS, SETTINGS, PLACEHOLDER }
 
     private data class Recent(val title: String, val url: String, val time: Long)
 
@@ -53,6 +57,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var tabsView: View
     private lateinit var downloadsView: View
     private lateinit var placeholderView: View
+    private lateinit var settingsView: View
     private lateinit var placeholderTitle: TextView
     private lateinit var placeholderText: TextView
 
@@ -75,6 +80,22 @@ class MainActivity : AppCompatActivity() {
     private lateinit var privateBadge: TextView
     private lateinit var tabCount: TextView
     private lateinit var btnTools: ImageView
+    private lateinit var btnShield: ImageView
+
+    // Settings switches
+    private lateinit var swAds: SwitchCompat
+    private lateinit var swHttps: SwitchCompat
+    private lateinit var swCookies: SwitchCompat
+    private lateinit var swFp: SwitchCompat
+    private lateinit var swLockApp: SwitchCompat
+    private lateinit var swLockPrivate: SwitchCompat
+
+    // Lock state
+    private var lockView: View? = null
+    private var authRunning = false
+    private var suppressLock = false
+    private var stoppedAt = 0L
+    private var privateUnlocked = false
 
     // Detect card (popup when a video plays)
     private lateinit var detectCard: View
@@ -137,6 +158,7 @@ class MainActivity : AppCompatActivity() {
     private val captureLauncher = registerForActivityResult(
         ActivityResultContracts.StartActivityForResult()
     ) { result ->
+        suppressLock = false
         val data = result.data
         if (result.resultCode == RESULT_OK && data != null) {
             val svc = Intent(this, RecorderService::class.java).apply {
@@ -154,15 +176,18 @@ class MainActivity : AppCompatActivity() {
     private val permLauncher = registerForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
     ) {
+        suppressLock = false
         askCapture()
     }
 
     private val notifLauncher = registerForActivityResult(
         ActivityResultContracts.RequestPermission()
-    ) { }
+    ) { suppressLock = false }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        Settings.init(this)
+        Shields.load(this)
         setContentView(R.layout.activity_main)
 
         bindViews()
@@ -190,6 +215,7 @@ class MainActivity : AppCompatActivity() {
                     }
                     Screen.TABS -> goHome()
                     Screen.DOWNLOADS -> leaveDownloads()
+                    Screen.SETTINGS -> goHome()
                     Screen.PLACEHOLDER -> goHome()
                     Screen.HOME -> finish()
                 }
@@ -197,6 +223,7 @@ class MainActivity : AppCompatActivity() {
         })
 
         showScreen(Screen.HOME, 0)
+        if (Settings.lockApp) showLock()
     }
 
     // ---------- Setup ----------
@@ -207,6 +234,7 @@ class MainActivity : AppCompatActivity() {
         tabsView = findViewById(R.id.tabsView)
         downloadsView = findViewById(R.id.downloadsView)
         placeholderView = findViewById(R.id.placeholderView)
+        settingsView = findViewById(R.id.settingsView)
         placeholderTitle = findViewById(R.id.placeholderTitle)
         placeholderText = findViewById(R.id.placeholderText)
 
@@ -227,6 +255,13 @@ class MainActivity : AppCompatActivity() {
         privateBadge = findViewById(R.id.privateBadge)
         tabCount = findViewById(R.id.tabCount)
         btnTools = findViewById(R.id.btnTools)
+        btnShield = findViewById(R.id.btnShield)
+        swAds = findViewById(R.id.swAds)
+        swHttps = findViewById(R.id.swHttps)
+        swCookies = findViewById(R.id.swCookies)
+        swFp = findViewById(R.id.swFp)
+        swLockApp = findViewById(R.id.swLockApp)
+        swLockPrivate = findViewById(R.id.swLockPrivate)
 
         detectCard = findViewById(R.id.detectCard)
         dcThumb = findViewById(R.id.dcThumb)
@@ -284,6 +319,7 @@ class MainActivity : AppCompatActivity() {
 
         // Browse
         btnTools.setOnClickListener { showToolsCard() }
+        btnShield.setOnClickListener { showShieldDialog() }
         tabCount.setOnClickListener { showScreen(Screen.TABS, 1) }
 
         // Recent
@@ -322,7 +358,7 @@ class MainActivity : AppCompatActivity() {
             showPlaceholder("Bookmarks", "Coming soon", 2)
         }
         findViewById<View>(R.id.navMore).setOnClickListener {
-            showPlaceholder("More", "Coming soon", 3)
+            showScreen(Screen.SETTINGS, 3)
         }
     }
 
@@ -349,6 +385,7 @@ class MainActivity : AppCompatActivity() {
         tabsView.visibility = if (s == Screen.TABS) View.VISIBLE else View.GONE
         downloadsView.visibility = if (s == Screen.DOWNLOADS) View.VISIBLE else View.GONE
         placeholderView.visibility = if (s == Screen.PLACEHOLDER) View.VISIBLE else View.GONE
+        settingsView.visibility = if (s == Screen.SETTINGS) View.VISIBLE else View.GONE
 
         for (i in navIcons.indices) {
             val c = color(if (i == nav) R.color.vio_accent else R.color.vio_subtext)
@@ -367,6 +404,7 @@ class MainActivity : AppCompatActivity() {
             Screen.BROWSE -> applyPrivateStyle()
             Screen.TABS -> renderTabs()
             Screen.DOWNLOADS -> renderDownloads()
+            Screen.SETTINGS -> bindSettings()
             Screen.PLACEHOLDER -> {}
         }
         updateUi()
@@ -429,6 +467,9 @@ class MainActivity : AppCompatActivity() {
             st.cacheMode = WebSettings.LOAD_NO_CACHE
         }
 
+        if (Settings.fingerprintProtection) st.userAgentString = Shields.reduceUa(st.userAgentString)
+        CookieManager.getInstance().setAcceptThirdPartyCookies(wv, !Settings.blockThirdPartyCookies)
+
         val sniffer = VideoSniffer(id) { itemIds.getAndIncrement() }
         sniffer.userAgent = st.userAgentString
         sniffer.onChange = { uiHandler.post { updateUi() } }
@@ -450,6 +491,7 @@ class MainActivity : AppCompatActivity() {
                     tab.url = url
                     sniffer.clear()
                     sniffer.pageUrl = url
+                    tab.blocked.set(0)
                     clearShown(tab)
                     if (tab === currentTab && !urlBar.hasFocus()) urlBar.setText(url)
                 }
@@ -457,11 +499,47 @@ class MainActivity : AppCompatActivity() {
                     loadingBar.visibility = View.VISIBLE
                 }
                 view?.evaluateJavascript(VideoSniffer.HOOK_JS, null)
+                injectShields(view, url)
+            }
+
+            override fun shouldOverrideUrlLoading(
+                view: WebView?,
+                request: WebResourceRequest?
+            ): Boolean {
+                val req = request ?: return false
+                if (!req.isForMainFrame) return false
+                val orig = req.url.toString()
+                if (tab.skipUpgradeUrl == orig) return false
+                val https = Shields.upgrade(orig) ?: return false
+                tab.httpFallback = orig
+                view?.loadUrl(https)
+                return true
+            }
+
+            // If an upgraded https page fails, go back to the original http address once
+            override fun onReceivedError(
+                view: WebView?,
+                request: WebResourceRequest?,
+                error: WebResourceError?
+            ) {
+                val req = request
+                if (req != null && req.isForMainFrame) {
+                    val orig = tab.httpFallback
+                    if (orig != null && req.url.toString().startsWith("https://")) {
+                        tab.httpFallback = null
+                        tab.skipUpgradeUrl = orig
+                        view?.loadUrl(orig)
+                        return
+                    }
+                }
+                super.onReceivedError(view, request, error)
             }
 
             override fun onPageFinished(view: WebView?, url: String?) {
                 if (tab === currentTab) loadingBar.visibility = View.GONE
                 view?.evaluateJavascript(VideoSniffer.HOOK_JS, null)
+                injectShields(view, url)
+                tab.httpFallback = null
                 tab.title = view?.title ?: ""
                 if (url != null && !tab.isPrivate) addRecent(view?.title, url)
             }
@@ -472,6 +550,11 @@ class MainActivity : AppCompatActivity() {
                 request: WebResourceRequest?
             ): WebResourceResponse? {
                 if (request != null) {
+                    val pageHost = hostOf(tab.url)
+                    if (Shields.shouldBlock(request.url.host, pageHost, request.isForMainFrame)) {
+                        tab.blocked.incrementAndGet()
+                        return Shields.emptyResponse()
+                    }
                     sniffer.checkRequest(request.url.toString())
                 }
                 return super.shouldInterceptRequest(view, request)
@@ -541,6 +624,14 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun newTab(isPrivate: Boolean) {
+        if (isPrivate) {
+            requirePrivate { newTabNow(true) }
+        } else {
+            newTabNow(false)
+        }
+    }
+
+    private fun newTabNow(isPrivate: Boolean) {
         val t = createTab(isPrivate)
         homePrivate = isPrivate
         switchTo(t)
@@ -548,6 +639,14 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun openTab(tab: Tab) {
+        if (tab.isPrivate) {
+            requirePrivate { openTabNow(tab) }
+        } else {
+            openTabNow(tab)
+        }
+    }
+
+    private fun openTabNow(tab: Tab) {
         switchTo(tab)
         if (tab.isBlank) {
             homePrivate = tab.isPrivate
@@ -601,12 +700,15 @@ class MainActivity : AppCompatActivity() {
 
         for (tab in list) {
             val row = layoutInflater.inflate(R.layout.item_tab, tabsList, false)
+            val masked = tab.isPrivate && Settings.lockPrivate && !privateUnlocked
             val title = when {
+                masked -> "Private tab"
                 tab.title.isNotBlank() -> tab.title
                 tab.isBlank -> "New tab"
                 else -> hostOf(tab.url)
             }
             val sub = when {
+                masked -> "Locked"
                 tab.isBlank && tab.isPrivate -> "Private tab"
                 tab.isBlank -> "Start page"
                 tab.isPrivate -> "Private • " + hostOf(tab.url)
@@ -672,7 +774,13 @@ class MainActivity : AppCompatActivity() {
         openInTab(tab, url)
     }
 
-    private fun openInTab(tab: Tab, url: String) {
+    private fun openInTab(tab: Tab, typed: String) {
+        var url = typed
+        val upgraded = if (tab.skipUpgradeUrl == typed) null else Shields.upgrade(typed)
+        if (upgraded != null) {
+            tab.httpFallback = typed
+            url = upgraded
+        }
         tab.url = url
         switchTo(tab)
         showScreen(Screen.BROWSE, 1)
@@ -977,6 +1085,7 @@ class MainActivity : AppCompatActivity() {
         if (ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS)
             != PackageManager.PERMISSION_GRANTED
         ) {
+            suppressLock = true
             notifLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
         }
     }
@@ -1201,12 +1310,14 @@ class MainActivity : AppCompatActivity() {
         if (missing.isEmpty()) {
             askCapture()
         } else {
+            suppressLock = true
             permLauncher.launch(missing.toTypedArray())
         }
     }
 
     private fun askCapture() {
         val mpm = getSystemService(MEDIA_PROJECTION_SERVICE) as MediaProjectionManager
+        suppressLock = true
         captureLauncher.launch(mpm.createScreenCaptureIntent())
     }
 
@@ -1233,6 +1344,9 @@ class MainActivity : AppCompatActivity() {
         // URL bar tools icon: red while recording
         btnTools.setColorFilter(color(if (rec) R.color.vio_red else R.color.vio_accent))
         tabCount.text = "${tabs.size}"
+        val shieldHost = currentTab?.let { hostOf(it.url) } ?: ""
+        val shieldOn = Settings.blockAds && !Settings.shieldsOffFor(shieldHost)
+        btnShield.setColorFilter(color(if (shieldOn) R.color.vio_accent else R.color.vio_subtext))
 
         // Recording just started: tuck the card away so it isn't in the video
         if (rec && !lastRec && detectCard.visibility == View.VISIBLE) scheduleHide(2500)
@@ -1240,6 +1354,175 @@ class MainActivity : AppCompatActivity() {
 
         if (screen == Screen.DOWNLOADS) renderDownloads()
         if (detectCard.visibility == View.VISIBLE) bindDetectCard()
+    }
+
+    // ---------- Shields ----------
+
+    private fun injectShields(view: WebView?, url: String?) {
+        if (view == null || url == null) return
+        if (Settings.shieldsOffFor(hostOf(url))) return
+        if (Settings.blockAds) view.evaluateJavascript(Shields.COSMETIC_JS, null)
+        if (Settings.fingerprintProtection) view.evaluateJavascript(Shields.FINGERPRINT_JS, null)
+    }
+
+    private fun showShieldDialog() {
+        val tab = currentTab ?: return
+        val host = hostOf(tab.url)
+        if (host.isEmpty()) return
+        val off = Settings.shieldsOffFor(host)
+        val msg = when {
+            !Settings.blockAds -> "Ad and tracker blocking is off in Settings."
+            off -> "Shields are OFF for $host."
+            else -> "Shields are ON for $host.\n\nBlocked on this page: ${tab.blocked.get()}"
+        }
+        val b = AlertDialog.Builder(this).setTitle("Shields").setMessage(msg)
+        if (Settings.blockAds) {
+            b.setPositiveButton(if (off) "Turn on" else "Turn off for this site") { _, _ ->
+                Settings.setShieldsOff(host, !off)
+                tab.webView.reload()
+                updateUi()
+            }
+        }
+        b.setNegativeButton("Close", null).show()
+    }
+
+    private fun applyCookiePolicy() {
+        for (t in tabs) {
+            CookieManager.getInstance().setAcceptThirdPartyCookies(t.webView, !Settings.blockThirdPartyCookies)
+        }
+    }
+
+    // ---------- Settings screen ----------
+
+    private fun bindSettings() {
+        swAds.setOnCheckedChangeListener(null)
+        swHttps.setOnCheckedChangeListener(null)
+        swCookies.setOnCheckedChangeListener(null)
+        swFp.setOnCheckedChangeListener(null)
+        swLockApp.setOnCheckedChangeListener(null)
+        swLockPrivate.setOnCheckedChangeListener(null)
+
+        swAds.isChecked = Settings.blockAds
+        swHttps.isChecked = Settings.httpsUpgrade
+        swCookies.isChecked = Settings.blockThirdPartyCookies
+        swFp.isChecked = Settings.fingerprintProtection
+        swLockApp.isChecked = Settings.lockApp
+        swLockPrivate.isChecked = Settings.lockPrivate
+
+        swAds.setOnCheckedChangeListener { _, c -> Settings.blockAds = c }
+        swHttps.setOnCheckedChangeListener { _, c -> Settings.httpsUpgrade = c }
+        swCookies.setOnCheckedChangeListener { _, c ->
+            Settings.blockThirdPartyCookies = c
+            applyCookiePolicy()
+        }
+        swFp.setOnCheckedChangeListener { _, c -> Settings.fingerprintProtection = c }
+        swLockApp.setOnCheckedChangeListener { _, c ->
+            changeLock(c) { Settings.lockApp = c }
+        }
+        swLockPrivate.setOnCheckedChangeListener { _, c ->
+            changeLock(c) { Settings.lockPrivate = c }
+        }
+    }
+
+    /** Changing a lock setting needs the phone's fingerprint / PIN first. */
+    private fun changeLock(turnOn: Boolean, apply: () -> Unit) {
+        if (!AppLock.available(this)) {
+            toast("Set a screen lock or fingerprint on your phone first")
+            bindSettings()
+            return
+        }
+        suppressLock = true
+        authRunning = true
+        AppLock.authenticate(
+            this,
+            if (turnOn) "Turn on lock" else "Turn off lock",
+            {
+                authRunning = false
+                suppressLock = false
+                apply()
+                bindSettings()
+            },
+            {
+                authRunning = false
+                suppressLock = false
+                bindSettings()
+            }
+        )
+    }
+
+    // ---------- Lock ----------
+
+    private fun showLock() {
+        val existing = lockView
+        val v: View
+        if (existing == null) {
+            v = layoutInflater.inflate(R.layout.view_lock, null)
+            addContentView(
+                v,
+                ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT)
+            )
+            v.findViewById<View>(R.id.lockUnlock).setOnClickListener { promptUnlock() }
+            lockView = v
+        } else {
+            v = existing
+        }
+        v.visibility = View.VISIBLE
+        hideKeyboard()
+        promptUnlock()
+    }
+
+    private fun promptUnlock() {
+        if (authRunning) return
+        if (!AppLock.available(this)) {
+            lockView?.visibility = View.GONE
+            toast("No screen lock set on this phone, so Vio can't lock")
+            return
+        }
+        authRunning = true
+        suppressLock = true
+        AppLock.authenticate(
+            this,
+            "Unlock Vio",
+            {
+                authRunning = false
+                suppressLock = false
+                privateUnlocked = true
+                lockView?.visibility = View.GONE
+            },
+            {
+                authRunning = false
+                suppressLock = false
+            }
+        )
+    }
+
+    /** Runs [action] right away, or after the lock prompt if private tabs are locked. */
+    private fun requirePrivate(action: () -> Unit) {
+        if (!Settings.lockPrivate || privateUnlocked) {
+            action()
+            return
+        }
+        if (!AppLock.available(this)) {
+            action()
+            return
+        }
+        if (authRunning) return
+        authRunning = true
+        suppressLock = true
+        AppLock.authenticate(
+            this,
+            "Open private tabs",
+            {
+                authRunning = false
+                suppressLock = false
+                privateUnlocked = true
+                action()
+            },
+            {
+                authRunning = false
+                suppressLock = false
+            }
+        )
     }
 
     private fun toast(msg: String) {
@@ -1254,6 +1537,25 @@ class MainActivity : AppCompatActivity() {
     override fun onResume() {
         super.onResume()
         uiHandler.post(syncRunnable)
+    }
+
+    override fun onStop() {
+        stoppedAt = if (suppressLock || authRunning) 0L else SystemClock.elapsedRealtime()
+        super.onStop()
+    }
+
+    override fun onStart() {
+        super.onStart()
+        val t = stoppedAt
+        stoppedAt = 0L
+        if (t > 0 && SystemClock.elapsedRealtime() - t > 15000) {
+            privateUnlocked = false
+            if (Settings.lockApp) {
+                showLock()
+            } else if (Settings.lockPrivate && screen == Screen.BROWSE && currentTab?.isPrivate == true) {
+                goHome()
+            }
+        }
     }
 
     override fun onPause() {

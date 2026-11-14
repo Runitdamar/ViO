@@ -1,6 +1,7 @@
 package com.runit.webrecorder
 
 import android.webkit.WebView
+import androidx.webkit.ScriptHandler
 import java.util.concurrent.atomic.AtomicInteger
 
 /**
@@ -19,6 +20,9 @@ class Tab(
 
     /** Ads / trackers blocked on the current page. */
     val blocked = AtomicInteger(0)
+
+    /** Scripts registered to run at the start of every page. */
+    val scripts = ArrayList<ScriptHandler>()
 
     /** If we upgraded this page to https: the original http address, to fall back to if it fails. */
     @Volatile var httpFallback: String? = null

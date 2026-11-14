@@ -93,6 +93,71 @@ object Shields {
     fun reduceUa(ua: String): String =
         ua.replace(Regex("\\(Linux; Android ([0-9.]+); [^)]*\\)"), "(Linux; Android \$1; K)")
 
+    /** YouTube serves ads from its own servers, so a host list can't catch them. This removes the ad data from the player info instead. */
+    const val YT_JS = """
+(function() {
+  var host = location.hostname;
+  if (host.indexOf('youtube.com') < 0 && host.indexOf('youtube-nocookie.com') < 0) return;
+  var keys = ['adPlacements', 'playerAds', 'adSlots', 'adBreakHeartbeatParams'];
+  function prune(o) {
+    if (!o || typeof o !== 'object') return o;
+    for (var i = 0; i < keys.length; i++) {
+      if (keys[i] in o) { try { delete o[keys[i]]; } catch (e) {} }
+    }
+    if (o.playerResponse) prune(o.playerResponse);
+    return o;
+  }
+  var jp = JSON.parse;
+  JSON.parse = function() { return prune(jp.apply(this, arguments)); };
+  if (window.Response && Response.prototype.json) {
+    var rj = Response.prototype.json;
+    Response.prototype.json = function() { return rj.apply(this, arguments).then(prune); };
+  }
+  var pr;
+  try {
+    Object.defineProperty(window, 'ytInitialPlayerResponse', {
+      configurable: true,
+      get: function() { return pr; },
+      set: function(v) { pr = prune(v); }
+    });
+  } catch (e) {}
+  var mutedByUs = false;
+  setInterval(function() {
+    var p = document.querySelector('.html5-video-player.ad-showing, #movie_player.ad-showing');
+    var skip = document.querySelector('.ytp-ad-skip-button, .ytp-ad-skip-button-modern, .ytp-skip-ad-button, .ytm-skip-ad-button');
+    if (skip) skip.click();
+    var v = document.querySelector('video');
+    if (p && v && isFinite(v.duration) && v.duration > 0) {
+      v.muted = true;
+      mutedByUs = true;
+      v.currentTime = v.duration;
+    } else if (!p && mutedByUs && v) {
+      v.muted = false;
+      mutedByUs = false;
+    }
+  }, 400);
+})();
+"""
+
+    /** Script that runs before the page's own scripts (needs a recent WebView). */
+    fun docStartScript(offHosts: Set<String>): String? {
+        if (!Settings.blockAds && !Settings.fingerprintProtection) return null
+        val sb = StringBuilder()
+        sb.append("(function(){var off=")
+        sb.append(org.json.JSONArray(offHosts.toList()).toString())
+        sb.append(";")
+        sb.append(GUARD_JS)
+        if (Settings.blockAds) {
+            sb.append(YT_JS)
+            sb.append(COSMETIC_JS)
+        }
+        if (Settings.fingerprintProtection) sb.append(FINGERPRINT_JS)
+        sb.append("})();")
+        return sb.toString()
+    }
+
+    private const val GUARD_JS = """var h=(location.hostname||'').replace(/^www\./,'');if(off.indexOf(h)>=0)return;"""
+
     /** Hides common ad containers that are left behind on the page. */
     const val COSMETIC_JS = """
 (function() {
@@ -102,9 +167,15 @@ object Shields {
     'iframe[src*="doubleclick.net"],iframe[src*="googlesyndication.com"],iframe[src*="adservice"],' +
     '.ad-slot,.ad-banner,.advert,.advertisement,.sponsored-ad,[data-ad-slot],[data-google-query-id]' +
     '{display:none !important;}';
-  var s = document.createElement('style');
-  s.textContent = css;
-  (document.head || document.documentElement).appendChild(s);
+  function add() {
+    var root = document.head || document.documentElement;
+    if (!root) return false;
+    var s = document.createElement('style');
+    s.textContent = css;
+    root.appendChild(s);
+    return true;
+  }
+  if (!add()) document.addEventListener('DOMContentLoaded', add);
 })();
 """
 

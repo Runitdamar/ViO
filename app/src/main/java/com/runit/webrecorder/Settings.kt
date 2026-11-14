@@ -42,6 +42,8 @@ object Settings {
     private fun offSet(): MutableSet<String> =
         HashSet(prefs.getStringSet("shields_off", emptySet()) ?: emptySet())
 
+    fun shieldsOffAll(): Set<String> = offSet()
+
     fun shieldsOffFor(host: String): Boolean = offSet().contains(host)
 
     fun setShieldsOff(host: String, off: Boolean) {

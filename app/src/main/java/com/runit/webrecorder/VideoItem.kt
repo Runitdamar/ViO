@@ -21,6 +21,10 @@ class VideoItem(
 
     @Volatile var kind: Kind = if (isPlaylistUrl(url)) Kind.HLS else Kind.FILE
 
+    /** A normal file download (PDF, zip, mp3 ...) caught from the page, not a detected video. */
+    @Volatile var generic: Boolean = false
+    @Volatile var cat: Cat = Cat.VIDEO
+
     // ---- Metadata ----
     @Volatile var title: String = title
     @Volatile var titleFromPage: Boolean = false
@@ -78,6 +82,10 @@ class VideoItem(
     fun isSelectable(): Boolean = (state == State.IDLE || state == State.FAILED) && problem == null
 
     fun typeLabel(): String {
+        if (generic) {
+            val e = (serverFileName ?: "").substringAfterLast('.', "")
+            return if (e.isNotEmpty() && e.length <= 5) e.uppercase(Locale.US) else cat.label.uppercase(Locale.US)
+        }
         if (kind == Kind.HLS) return "HLS"
         val m = mime?.lowercase(Locale.US) ?: ""
         return when {
@@ -103,6 +111,9 @@ class VideoItem(
 
     /** e.g. "1280 × 720 • 12.4 MB • 0:32" */
     fun metaLine(): String {
+        if (generic) {
+            return if (sizeBytes > 0) formatSize(sizeBytes) + " • " + cat.label else cat.label
+        }
         val parts = ArrayList<String>()
         if (width > 0 && height > 0) parts.add("$width × $height")
         else if (kind == Kind.HLS) {

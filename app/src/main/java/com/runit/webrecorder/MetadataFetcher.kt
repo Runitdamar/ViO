@@ -67,6 +67,10 @@ object MetadataFetcher {
     }
 
     fun loadDetails(item: VideoItem, onDone: () -> Unit) {
+        if (item.generic) {
+            item.detailsState = 3
+            return
+        }
         synchronized(item) {
             if (item.detailsState != 0) return
             item.detailsState = 1

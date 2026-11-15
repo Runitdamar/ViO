@@ -111,7 +111,7 @@ class DownloadService : Service() {
     private fun build(): Notification {
         val active = DownloadCenter.all().filter { it.isBusy() }
         val first = active.firstOrNull()
-        val title = if (active.size > 1) "Downloading ${active.size} videos" else "Downloading"
+        val title = if (active.size > 1) "Downloading ${active.size} files" else "Downloading"
         val text = if (first == null) "Starting..." else {
             val p = if (first.progress >= 0) "${first.progress}%" else ""
             val sp = DownloadUtil.formatSpeed(first.speedBps)

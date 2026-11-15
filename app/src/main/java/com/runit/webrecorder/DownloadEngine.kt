@@ -129,6 +129,22 @@ object Naming {
         }
     }
 
+    /** File name (with extension) for a finished download. */
+    fun finalName(item: VideoItem, ext: String): String {
+        if (!item.generic) return baseName(item) + "." + ext
+        val sn = item.serverFileName ?: item.title
+        val stem = DownloadUtil.cleanFileBase(sn.substringBeforeLast('.', sn)).ifEmpty { "file" }
+        val e = if (sn.contains('.')) {
+            sn.substringAfterLast('.')
+        } else {
+            // no extension in the name: use the one that goes with the file type, else .bin
+            val m = item.mime
+            val fromMime = if (m != null) android.webkit.MimeTypeMap.getSingleton().getExtensionFromMimeType(m) else null
+            fromMime ?: "bin"
+        }
+        return "$stem.${e.ifEmpty { "bin" }}"
+    }
+
     fun mimeFor(ext: String): String = when (ext) {
         "webm" -> "video/webm"
         "mkv" -> "video/x-matroska"
@@ -139,23 +155,23 @@ object Naming {
     }
 }
 
-/** Moves a finished temp file into Movies/WebRecorder. */
+/** Moves a finished temp file into the public folder for its category (Movies/WebRecorder, Music/Vio ...). */
 object Publisher {
-    fun publish(ctx: Context, src: File, displayName: String, mime: String): String {
+    fun publish(ctx: Context, src: File, displayName: String, mime: String, cat: Cat = Cat.VIDEO): String {
         val resolver = ctx.contentResolver
         if (Build.VERSION.SDK_INT >= 29) {
             val values = ContentValues()
-            values.put(MediaStore.Video.Media.DISPLAY_NAME, displayName)
-            values.put(MediaStore.Video.Media.MIME_TYPE, mime)
-            values.put(MediaStore.Video.Media.RELATIVE_PATH, Environment.DIRECTORY_MOVIES + "/WebRecorder")
-            values.put(MediaStore.Video.Media.IS_PENDING, 1)
-            val uri = resolver.insert(MediaStore.Video.Media.EXTERNAL_CONTENT_URI, values)
+            values.put(MediaStore.MediaColumns.DISPLAY_NAME, displayName)
+            values.put(MediaStore.MediaColumns.MIME_TYPE, mime)
+            values.put(MediaStore.MediaColumns.RELATIVE_PATH, Library.folder(cat))
+            values.put(MediaStore.MediaColumns.IS_PENDING, 1)
+            val uri = resolver.insert(Library.collection(cat), values)
                 ?: throw IOException("Cannot create file")
             try {
                 val out = resolver.openOutputStream(uri) ?: throw IOException("Cannot open file")
                 out.use { o -> src.inputStream().use { it.copyTo(o, 256 * 1024) } }
                 val upd = ContentValues()
-                upd.put(MediaStore.Video.Media.IS_PENDING, 0)
+                upd.put(MediaStore.MediaColumns.IS_PENDING, 0)
                 resolver.update(uri, upd, null, null)
             } catch (e: Exception) {
                 try {
@@ -166,8 +182,7 @@ object Publisher {
             }
             return displayName
         }
-        val dir = ctx.getExternalFilesDir(Environment.DIRECTORY_MOVIES) ?: ctx.filesDir
-        dir.mkdirs()
+        val dir = Library.legacyDir(ctx, cat)
         var f = File(dir, displayName)
         var n = 1
         val stem = displayName.substringBeforeLast('.')

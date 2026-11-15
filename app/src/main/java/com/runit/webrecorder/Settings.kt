@@ -51,4 +51,9 @@ object Settings {
         if (off) set.add(host) else set.remove(host)
         prefs.edit().putStringSet("shields_off", set).apply()
     }
+
+    /** How many downloads run at the same time (1-3). */
+    var maxDownloads: Int
+        get() = prefs.getInt("max_downloads", 2).coerceIn(1, 3)
+        set(v) = prefs.edit().putInt("max_downloads", v.coerceIn(1, 3)).apply()
 }

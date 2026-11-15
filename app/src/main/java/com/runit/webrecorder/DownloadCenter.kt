@@ -3,15 +3,20 @@ package com.runit.webrecorder
 import android.content.Context
 import java.io.File
 import java.util.concurrent.ConcurrentHashMap
-import java.util.concurrent.Executors
+import java.util.concurrent.LinkedBlockingQueue
+import java.util.concurrent.ThreadPoolExecutor
+import java.util.concurrent.TimeUnit
 
 /**
- * Runs downloads (two at a time) and keeps every VideoItem's progress up to date.
- * Supports pause / resume / cancel. Finished files go to Movies/WebRecorder.
+ * Runs downloads (1-3 at a time, see Settings.maxDownloads) and keeps every VideoItem's progress up to date.
+ * Supports pause / resume / cancel and pause-all / resume-all. Finished files go to the folder for their
+ * category (Movies/WebRecorder, Music/Vio, Pictures/Vio, Download/Vio).
  */
 object DownloadCenter {
 
-    private val pool = Executors.newFixedThreadPool(2)
+    private val pool = ThreadPoolExecutor(2, 2, 30, TimeUnit.SECONDS, LinkedBlockingQueue<Runnable>()).also {
+        it.allowCoreThreadTimeOut(true)
+    }
     private val jobs = ConcurrentHashMap<Int, VideoItem>()
 
     /** Short messages for the UI to show as toasts. */
@@ -25,6 +30,45 @@ object DownloadCenter {
     fun all(): List<VideoItem> = jobs.values.sortedByDescending { it.id }
 
     fun activeCount(): Int = jobs.values.count { it.isBusy() }
+
+    fun pausedCount(): Int = jobs.values.count { it.state == VideoItem.State.PAUSED }
+
+    fun failedCount(): Int = jobs.values.count { it.state == VideoItem.State.FAILED }
+
+    /** Applies Settings.maxDownloads to the worker pool (safe to call any time). */
+    fun applyParallelism() {
+        val n = Settings.maxDownloads.coerceIn(1, 3)
+        try {
+            if (n > pool.maximumPoolSize) {
+                pool.maximumPoolSize = n
+                pool.corePoolSize = n
+            } else {
+                pool.corePoolSize = n
+                pool.maximumPoolSize = n
+            }
+        } catch (_: Exception) {
+        }
+    }
+
+    fun pauseAll() {
+        for (it in jobs.values) if (it.isBusy()) it.control = 1
+        onChange?.invoke()
+    }
+
+    fun resumeAll(ctx: Context) {
+        for (it in jobs.values.sortedBy { x -> x.id }) {
+            if (it.state == VideoItem.State.PAUSED) enqueue(ctx, it)
+        }
+    }
+
+    fun retryFailed(ctx: Context) {
+        for (it in jobs.values.sortedBy { x -> x.id }) {
+            if (it.state == VideoItem.State.FAILED) enqueue(ctx, it)
+        }
+    }
+
+    /** True if this URL is already being downloaded (or waiting). */
+    fun hasActiveUrl(url: String): Boolean = jobs.values.any { it.isActive() && it.url == url }
 
     fun enqueue(ctx: Context, item: VideoItem, variant: HlsVariant? = null) {
         if (item.isBusy()) return
@@ -44,6 +88,7 @@ object DownloadCenter {
         item.etaSec = -1
         jobs[item.id] = item
         val app = ctx.applicationContext
+        applyParallelism()
         DownloadService.sync(app)
         onChange?.invoke()
         pool.execute { process(app, item) }
@@ -142,14 +187,17 @@ object DownloadCenter {
             item.speedBps = 0
             item.etaSec = -1
             onChange?.invoke()
-            val name = Naming.baseName(item) + "." + result.second
-            val saved = Publisher.publish(ctx, result.first, name, Naming.mimeFor(result.second))
+            val name = Naming.finalName(item, result.second)
+            val cat = if (item.generic) Library.categoryFor(name, item.mime) else Cat.VIDEO
+            val mime = if (item.generic) Library.mimeFor(name, cat) else Naming.mimeFor(result.second)
+            val saved = Publisher.publish(ctx, result.first, name, mime, cat)
+            item.cat = cat
             cleanFiles(dir, item)
             item.engineState = null
             item.message = saved
             item.progress = 100
             item.state = VideoItem.State.DONE
-            onEvent?.invoke("Saved to Movies/WebRecorder: $saved")
+            onEvent?.invoke("Saved to " + Library.folder(cat) + ": " + saved)
             DownloadService.notifyDone(ctx, saved)
         } catch (e: Interrupted) {
             if (e.kind == 1) {

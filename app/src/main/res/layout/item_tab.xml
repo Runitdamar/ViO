@@ -65,6 +65,15 @@
     </LinearLayout>
 
     <ImageView
+        android:id="@+id/tabPin"
+        android:layout_width="16dp"
+        android:layout_height="16dp"
+        android:layout_marginEnd="4dp"
+        android:src="@drawable/ic_pin"
+        android:tint="@color/vio_accent"
+        android:visibility="gone" />
+
+    <ImageView
         android:id="@+id/tabClose"
         android:layout_width="36dp"
         android:layout_height="36dp"

@@ -56,4 +56,47 @@ object Settings {
     var maxDownloads: Int
         get() = prefs.getInt("max_downloads", 2).coerceIn(1, 3)
         set(v) = prefs.edit().putInt("max_downloads", v.coerceIn(1, 3)).apply()
+
+    // ---- browsing ----
+
+    var swipeNav: Boolean
+        get() = prefs.getBoolean("swipe_nav", true)
+        set(v) = prefs.edit().putBoolean("swipe_nav", v).apply()
+
+    var pullRefresh: Boolean
+        get() = prefs.getBoolean("pull_refresh", true)
+        set(v) = prefs.edit().putBoolean("pull_refresh", v).apply()
+
+    var searchSuggestions: Boolean
+        get() = prefs.getBoolean("search_suggest", true)
+        set(v) = prefs.edit().putBoolean("search_suggest", v).apply()
+
+    // ---- start page ----
+
+    var showShortcuts: Boolean
+        get() = prefs.getBoolean("show_shortcuts", true)
+        set(v) = prefs.edit().putBoolean("show_shortcuts", v).apply()
+
+    var showRecent: Boolean
+        get() = prefs.getBoolean("show_recent", true)
+        set(v) = prefs.edit().putBoolean("show_recent", v).apply()
+
+    /** Name shown in the start page greeting ("Good morning, Runit."). Empty = no name. */
+    var greetName: String
+        get() = prefs.getString("greet_name", "") ?: ""
+        set(v) = prefs.edit().putString("greet_name", v.trim()).apply()
+
+    // ---- desktop mode (per site) ----
+
+    private fun desktopSet(): MutableSet<String> =
+        HashSet(prefs.getStringSet("desktop_hosts", emptySet()) ?: emptySet())
+
+    fun isDesktop(host: String): Boolean = host.isNotEmpty() && desktopSet().contains(host)
+
+    fun setDesktop(host: String, on: Boolean) {
+        if (host.isEmpty()) return
+        val set = desktopSet()
+        if (on) set.add(host) else set.remove(host)
+        prefs.edit().putStringSet("desktop_hosts", set).apply()
+    }
 }

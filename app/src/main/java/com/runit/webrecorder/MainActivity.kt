@@ -13,6 +13,7 @@ import android.os.Build
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
+import android.os.Message
 import android.provider.MediaStore
 import android.os.SystemClock
 import android.text.Editable
@@ -22,6 +23,8 @@ import android.text.TextWatcher
 import android.text.style.ForegroundColorSpan
 import android.util.LruCache
 import android.view.Gravity
+import android.view.HapticFeedbackConstants
+import android.view.MotionEvent
 import android.view.WindowManager
 import android.webkit.URLUtil
 import android.view.KeyEvent
@@ -30,6 +33,8 @@ import android.view.ViewGroup
 import android.view.inputmethod.EditorInfo
 import android.view.inputmethod.InputMethodManager
 import android.webkit.CookieManager
+import android.webkit.GeolocationPermissions
+import android.webkit.PermissionRequest
 import android.webkit.WebChromeClient
 import android.webkit.WebResourceError
 import android.webkit.WebResourceRequest
@@ -52,6 +57,9 @@ import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.widget.SwitchCompat
 import androidx.core.content.ContextCompat
+import androidx.swiperefreshlayout.widget.SwipeRefreshLayout
+import com.journeyapps.barcodescanner.ScanContract
+import com.journeyapps.barcodescanner.ScanOptions
 import androidx.webkit.WebViewCompat
 import androidx.webkit.WebViewFeature
 import org.json.JSONArray
@@ -210,6 +218,37 @@ class MainActivity : AppCompatActivity() {
     private var homePrivate = false
     private var showAllRecent = false
 
+    // Browsing features
+    private lateinit var urlRow: View
+    private lateinit var btnSite: ImageView
+    private lateinit var btnMenu: ImageView
+    private lateinit var bottomNav: View
+    private lateinit var navDivider: View
+    private lateinit var fsExit: View
+    private lateinit var suggestCard: View
+    private lateinit var suggestList: LinearLayout
+    private lateinit var tabsSearch: EditText
+    private lateinit var tabsTitle: TextView
+    private lateinit var shortcutsSection: View
+    private lateinit var shortcutsGrid: LinearLayout
+    private lateinit var swSuggest: SwitchCompat
+    private lateinit var swSwipe: SwitchCompat
+    private lateinit var swPull: SwitchCompat
+    private lateinit var swShortcuts: SwitchCompat
+    private lateinit var swRecentHome: SwitchCompat
+    private var tabQuery = ""
+    private var browseFs = false
+    private var browseFsFlags = 0
+    private var sugSeq = 0
+    private var sugAnchor: EditText? = null
+    private val sugExec = Executors.newSingleThreadExecutor()
+    private var pendingSiteAction: ((Map<String, Boolean>) -> Unit)? = null
+    private var swipeActive = false
+    private var swipeDone = false
+    private var swipeFromLeft = false
+    private var swipeX = 0f
+    private var swipeY = 0f
+
     // Download screen rows
     private val rowViews = HashMap<Int, View>()
     private var shownIds: List<Int> = emptyList()
@@ -282,9 +321,29 @@ class MainActivity : AppCompatActivity() {
         ActivityResultContracts.RequestPermission()
     ) { suppressLock = false }
 
+    // Camera / microphone / location the phone must allow before a site can use them
+    private val sitePermLauncher = registerForActivityResult(
+        ActivityResultContracts.RequestMultiplePermissions()
+    ) { result ->
+        suppressLock = false
+        val cb = pendingSiteAction
+        pendingSiteAction = null
+        cb?.invoke(result)
+    }
+
+    private val scanLauncher = registerForActivityResult(ScanContract()) { res ->
+        suppressLock = false
+        val text = res?.contents
+        if (text.isNullOrBlank()) toast("Nothing scanned") else onScanned(text)
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         Settings.init(this)
+        SearchEngines.init(this)
+        SitePermissions.init(this)
+        StartPage.init(this)
+        TabStore.init(this)
         Playlists.init(this)
         Shields.load(this)
         DownloadCenter.applyParallelism()
@@ -317,6 +376,15 @@ class MainActivity : AppCompatActivity() {
                     exitFullscreen()
                     return
                 }
+                if (browseFs) {
+                    setBrowseFullscreen(false)
+                    return
+                }
+                if (suggestCard.visibility == View.VISIBLE) {
+                    hideSuggestions()
+                    hideKeyboard()
+                    return
+                }
                 when (screen) {
                     Screen.BROWSE -> {
                         val wv = currentTab?.webView
@@ -338,6 +406,7 @@ class MainActivity : AppCompatActivity() {
             }
         })
 
+        restorePinned()
         showScreen(Screen.HOME, 0)
         if (Settings.lockApp) showLock()
     }
@@ -372,6 +441,21 @@ class MainActivity : AppCompatActivity() {
         tabCount = findViewById(R.id.tabCount)
         btnTools = findViewById(R.id.btnTools)
         btnShield = findViewById(R.id.btnShield)
+        btnSite = findViewById(R.id.btnSite)
+        btnMenu = findViewById(R.id.btnMenu)
+        urlRow = findViewById(R.id.urlRow)
+        bottomNav = findViewById(R.id.bottomNav)
+        navDivider = findViewById(R.id.navDivider)
+        fsExit = findViewById(R.id.fsExit)
+        suggestCard = findViewById(R.id.suggestCard)
+        suggestList = findViewById(R.id.suggestList)
+        shortcutsSection = findViewById(R.id.shortcutsSection)
+        shortcutsGrid = findViewById(R.id.shortcutsGrid)
+        swSuggest = findViewById(R.id.swSuggest)
+        swSwipe = findViewById(R.id.swSwipe)
+        swPull = findViewById(R.id.swPull)
+        swShortcuts = findViewById(R.id.swShortcuts)
+        swRecentHome = findViewById(R.id.swRecentHome)
         swAds = findViewById(R.id.swAds)
         swHttps = findViewById(R.id.swHttps)
         swCookies = findViewById(R.id.swCookies)
@@ -389,11 +473,14 @@ class MainActivity : AppCompatActivity() {
         dcProgress = findViewById(R.id.dcProgress)
 
         tabsList = findViewById(R.id.tabsList)
+        tabsSearch = findViewById(R.id.tabsSearch)
+        tabsTitle = findViewById(R.id.tabsTitle)
         chips = listOf(
             findViewById<TextView>(R.id.chipAll),
             findViewById<TextView>(R.id.chipNormal),
             findViewById<TextView>(R.id.chipPrivate),
-            findViewById<TextView>(R.id.chipRecent)
+            findViewById<TextView>(R.id.chipRecent),
+            findViewById<TextView>(R.id.chipClosed)
         )
 
         dlList = findViewById(R.id.dlList)
@@ -443,6 +530,25 @@ class MainActivity : AppCompatActivity() {
     private fun setupClicks() {
         bindGo(homeSearch)
         bindGo(urlBar)
+        setupSuggestions()
+        findViewById<View>(R.id.btnQrHome).setOnClickListener { startScan() }
+        btnSite.setOnClickListener { showSiteDialog() }
+        btnMenu.setOnClickListener { showBrowseMenu() }
+        fsExit.setOnClickListener { setBrowseFullscreen(false) }
+        findViewById<View>(R.id.rowEngine).setOnClickListener { showEngineDialog() }
+        findViewById<View>(R.id.rowGreetName).setOnClickListener { askGreetName() }
+        findViewById<View>(R.id.rowPerms).setOnClickListener { showPermManager() }
+        tabsSearch.addTextChangedListener(object : TextWatcher {
+            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
+            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {}
+            override fun afterTextChanged(s: Editable?) {
+                val q = s?.toString() ?: ""
+                if (q != tabQuery) {
+                    tabQuery = q
+                    renderTabs()
+                }
+            }
+        })
 
         // Home tiles
         findViewById<View>(R.id.tileGo).setOnClickListener {
@@ -574,17 +680,28 @@ class MainActivity : AppCompatActivity() {
             navTexts[i].setTextColor(c)
         }
 
-        if (s != Screen.BROWSE) hideDetectCard()
+        if (s != Screen.BROWSE) {
+            hideDetectCard()
+            setBrowseFullscreen(false)
+        }
+        hideSuggestions()
         if (s != Screen.HOME) hideKeyboard()
         if (s != Screen.DOWNLOADS) lockVault(true)
 
         when (s) {
             Screen.HOME -> {
                 applyHomeMode()
+                renderShortcuts()
                 renderRecent()
             }
             Screen.BROWSE -> applyPrivateStyle()
-            Screen.TABS -> renderTabs()
+            Screen.TABS -> {
+                if (tabQuery.isNotEmpty()) {
+                    tabQuery = ""
+                    tabsSearch.setText("")
+                }
+                renderTabs()
+            }
             Screen.DOWNLOADS -> {
                 applyDlTab()
                 renderDownloads()
@@ -617,7 +734,7 @@ class MainActivity : AppCompatActivity() {
             greeting.text = greetingText()
             greeting.setTextColor(color(R.color.vio_text))
             homeSubtitle.text = "Search the web or type a URL"
-            recentSection.visibility = View.VISIBLE
+            recentSection.visibility = if (Settings.showRecent) View.VISIBLE else View.GONE
         }
     }
 
@@ -627,11 +744,13 @@ class MainActivity : AppCompatActivity() {
 
     private fun greetingText(): String {
         val hour = Calendar.getInstance().get(Calendar.HOUR_OF_DAY)
-        return when {
-            hour < 12 -> "Good morning."
-            hour < 17 -> "Good afternoon."
-            else -> "Good evening."
+        val base = when {
+            hour < 12 -> "Good morning"
+            hour < 17 -> "Good afternoon"
+            else -> "Good evening"
         }
+        val name = Settings.greetName
+        return if (name.isEmpty()) "$base." else "$base, $name."
     }
 
     // ---------- Tabs ----------
@@ -649,6 +768,7 @@ class MainActivity : AppCompatActivity() {
         st.setSupportZoom(true)
         st.builtInZoomControls = true
         st.displayZoomControls = false
+        st.setSupportMultipleWindows(true)
         if (isPrivate) {
             st.cacheMode = WebSettings.LOAD_NO_CACHE
         }
@@ -661,6 +781,9 @@ class MainActivity : AppCompatActivity() {
         sniffer.onChange = { uiHandler.post { updateUi() } }
 
         val tab = Tab(id, isPrivate, wv, sniffer)
+        tab.mobileUa = st.userAgentString
+        tab.mobileWide = st.useWideViewPort
+        tab.mobileOverview = st.loadWithOverviewMode
 
         // Video info / play events from the page (arrive on a background thread)
         wv.addJavascriptInterface(
@@ -695,6 +818,7 @@ class MainActivity : AppCompatActivity() {
                 val req = request ?: return false
                 if (!req.isForMainFrame) return false
                 val orig = req.url.toString()
+                syncDesktop(tab, orig)
                 if (tab.skipUpgradeUrl == orig) return false
                 val https = Shields.upgrade(orig) ?: return false
                 tab.httpFallback = orig
@@ -727,7 +851,9 @@ class MainActivity : AppCompatActivity() {
                 injectShields(view, url)
                 tab.httpFallback = null
                 tab.title = view?.title ?: ""
+                tab.refresher?.isRefreshing = false
                 if (url != null && !tab.isPrivate) addRecent(view?.title, url)
+                if (tab.pinned) persistPinned()
             }
 
             // Sees every request the page makes, looks for video files
@@ -756,6 +882,87 @@ class MainActivity : AppCompatActivity() {
                 tab.title = title ?: ""
             }
 
+            // A link that opens a new window (target=_blank, window.open): becomes a new tab
+            override fun onCreateWindow(
+                view: WebView?,
+                isDialog: Boolean,
+                isUserGesture: Boolean,
+                resultMsg: Message?
+            ): Boolean {
+                if (!isUserGesture || resultMsg == null) return false
+                val transport = resultMsg.obj as? WebView.WebViewTransport ?: return false
+                val t = createTab(tab.isPrivate)
+                t.group = tab.group
+                t.openerId = tab.id
+                transport.webView = t.webView
+                resultMsg.sendToTarget()
+                uiHandler.post {
+                    switchTo(t)
+                    showScreen(Screen.BROWSE, 1)
+                }
+                return true
+            }
+
+            override fun onCloseWindow(window: WebView?) {
+                uiHandler.post {
+                    val t = tabs.firstOrNull { it.webView === window } ?: return@post
+                    val wasCurrent = t === currentTab
+                    closeTab(t, false)
+                    if (wasCurrent && screen == Screen.BROWSE) {
+                        val next = currentTab
+                        if (next != null) switchTo(next) else goHome()
+                    }
+                    updateUi()
+                }
+            }
+
+            // A site asks for the camera or microphone
+            override fun onPermissionRequest(request: PermissionRequest?) {
+                val req = request ?: return
+                uiHandler.post {
+                    val needs = ArrayList<Perm>()
+                    for (r in req.resources) {
+                        if (r == PermissionRequest.RESOURCE_VIDEO_CAPTURE) needs.add(Perm.CAMERA)
+                        if (r == PermissionRequest.RESOURCE_AUDIO_CAPTURE) needs.add(Perm.MIC)
+                    }
+                    if (needs.isEmpty()) {
+                        try {
+                            req.deny()
+                        } catch (_: Exception) {
+                        }
+                        return@post
+                    }
+                    askSitePermissions(tab, req.origin.toString(), needs) { ok ->
+                        try {
+                            if (ok) {
+                                val granted = ArrayList<String>()
+                                if (needs.contains(Perm.CAMERA)) granted.add(PermissionRequest.RESOURCE_VIDEO_CAPTURE)
+                                if (needs.contains(Perm.MIC)) granted.add(PermissionRequest.RESOURCE_AUDIO_CAPTURE)
+                                req.grant(granted.toTypedArray())
+                            } else {
+                                req.deny()
+                            }
+                        } catch (_: Exception) {
+                        }
+                    }
+                }
+            }
+
+            // A site asks for your location
+            override fun onGeolocationPermissionsShowPrompt(
+                origin: String?,
+                callback: GeolocationPermissions.Callback?
+            ) {
+                val cb = callback ?: return
+                val o = origin ?: return
+                askSitePermissions(tab, o, listOf(Perm.LOCATION)) { ok ->
+                    try {
+                        cb.invoke(o, ok, false)
+                    } catch (_: Exception) {
+                    }
+                }
+            }
+
             // The video's fullscreen button
             override fun onShowCustomView(view: View?, callback: WebChromeClient.CustomViewCallback?) {
                 if (view == null || customView != null) {
@@ -772,13 +979,73 @@ class MainActivity : AppCompatActivity() {
 
         // Any file download the page starts (PDF, zip, mp3 ...) goes through Vio's own downloader
         wv.setDownloadListener { url, userAgent, contentDisposition, mimeType, contentLength ->
-            uiHandler.post { onPageDownload(tab, url, userAgent, contentDisposition, mimeType, contentLength) }
+            uiHandler.post {
+                var owner = tab
+                // A new window that only turned out to be a download: drop it, go back to the page
+                if (tab.url.isEmpty() && tab.openerId != 0) {
+                    val op = tabs.firstOrNull { it.id == tab.openerId }
+                    if (op != null) {
+                        owner = op
+                        val wasCurrent = tab === currentTab
+                        closeTab(tab, false)
+                        if (wasCurrent) switchTo(op)
+                    }
+                }
+                onPageDownload(owner, url, userAgent, contentDisposition, mimeType, contentLength)
+            }
         }
 
-        wv.visibility = View.GONE
-        // Index 0 keeps the detect card above every WebView
-        webContainer.addView(
+        // Press and hold on a link or an image
+        wv.setOnLongClickListener {
+            val hit = wv.hitTestResult
+            val extra = hit.extra
+            when (hit.type) {
+                WebView.HitTestResult.SRC_ANCHOR_TYPE -> {
+                    if (extra != null) showLinkMenu(tab, extra, null)
+                    extra != null
+                }
+                WebView.HitTestResult.SRC_IMAGE_ANCHOR_TYPE -> {
+                    val h = Handler(Looper.getMainLooper()) { m ->
+                        val link = m.data.getString("url")
+                        val src = m.data.getString("src")
+                        if (!link.isNullOrEmpty()) {
+                            showLinkMenu(tab, link, if (src.isNullOrEmpty()) null else src)
+                        } else if (!src.isNullOrEmpty()) {
+                            showLinkMenu(tab, null, src)
+                        }
+                        true
+                    }
+                    wv.requestFocusNodeHref(h.obtainMessage())
+                    true
+                }
+                WebView.HitTestResult.IMAGE_TYPE -> {
+                    if (extra != null) showLinkMenu(tab, null, extra)
+                    extra != null
+                }
+                else -> false
+            }
+        }
+
+        // The page sits inside a pull-to-refresh layout
+        val holder = SwipeRefreshLayout(this)
+        holder.addView(
             wv,
+            ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT)
+        )
+        holder.setColorSchemeColors(color(R.color.vio_accent))
+        holder.setProgressBackgroundColorSchemeColor(color(R.color.vio_surface))
+        holder.setOnChildScrollUpCallback { _, _ -> wv.scrollY > 0 }
+        holder.setOnRefreshListener {
+            wv.reload()
+            uiHandler.postDelayed({ holder.isRefreshing = false }, 1500)
+        }
+        holder.isEnabled = Settings.pullRefresh
+        holder.visibility = View.GONE
+        tab.holder = holder
+        tab.refresher = holder
+        // Index 0 keeps the detect card above every page
+        webContainer.addView(
+            holder,
             0,
             FrameLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
@@ -788,6 +1055,803 @@ class MainActivity : AppCompatActivity() {
         tabs.add(tab)
         installDocScripts(tab)
         return tab
+    }
+
+    // ---------- Small dialogs and helpers ----------
+
+    private fun promptText(
+        title: String,
+        hint: String,
+        initial: String,
+        allowEmpty: Boolean,
+        onOk: (String) -> Unit
+    ) {
+        val input = EditText(this)
+        input.hint = hint
+        input.maxLines = 1
+        input.inputType = android.text.InputType.TYPE_CLASS_TEXT
+        input.setText(initial)
+        input.setSelection(input.text.length)
+        val box = FrameLayout(this)
+        box.setPadding(dp(20), dp(8), dp(20), 0)
+        box.addView(
+            input,
+            FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT)
+        )
+        AlertDialog.Builder(this)
+            .setTitle(title)
+            .setView(box)
+            .setPositiveButton("Save") { _, _ ->
+                val v = input.text.toString().trim()
+                if (v.isNotEmpty() || allowEmpty) onOk(v)
+            }
+            .setNegativeButton("Cancel", null)
+            .show()
+    }
+
+    /** Two fields. [onOk] returns an error message to show (and ask again), or null when it worked. */
+    private fun promptTwo(
+        title: String,
+        hint1: String,
+        v1: String,
+        hint2: String,
+        v2: String,
+        onOk: (String, String) -> String?
+    ) {
+        val a = EditText(this)
+        a.hint = hint1
+        a.maxLines = 1
+        a.inputType = android.text.InputType.TYPE_CLASS_TEXT
+        a.setText(v1)
+        val b = EditText(this)
+        b.hint = hint2
+        b.maxLines = 1
+        b.inputType = android.text.InputType.TYPE_CLASS_TEXT or android.text.InputType.TYPE_TEXT_VARIATION_URI
+        b.setText(v2)
+        val box = LinearLayout(this)
+        box.orientation = LinearLayout.VERTICAL
+        box.setPadding(dp(20), dp(8), dp(20), 0)
+        box.addView(
+            a,
+            LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT)
+        )
+        box.addView(
+            b,
+            LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT)
+        )
+        AlertDialog.Builder(this)
+            .setTitle(title)
+            .setView(box)
+            .setPositiveButton("Save") { _, _ ->
+                val x = a.text.toString().trim()
+                val y = b.text.toString().trim()
+                val err = onOk(x, y)
+                if (err != null) {
+                    toast(err)
+                    promptTwo(title, hint1, x, hint2, y, onOk)
+                }
+            }
+            .setNegativeButton("Cancel", null)
+            .show()
+    }
+
+    private fun copyText(text: String) {
+        val cm = getSystemService(CLIPBOARD_SERVICE) as android.content.ClipboardManager
+        cm.setPrimaryClip(android.content.ClipData.newPlainText("Vio", text))
+        toast("Copied")
+    }
+
+    private fun shareText(text: String) {
+        val i = Intent(Intent.ACTION_SEND)
+        i.type = "text/plain"
+        i.putExtra(Intent.EXTRA_TEXT, text)
+        try {
+            startActivity(Intent.createChooser(i, "Share"))
+        } catch (_: Exception) {
+            toast("Nothing to share with")
+        }
+    }
+
+    // ---------- Long-press on a link or image ----------
+
+    private fun showLinkMenu(tab: Tab, link: String?, image: String?) {
+        val labels = ArrayList<String>()
+        val acts = ArrayList<() -> Unit>()
+        val shown = link ?: image ?: return
+        if (link != null) {
+            val web = link.startsWith("http://") || link.startsWith("https://")
+            if (web) {
+                labels.add("Open in new tab")
+                acts.add { openLinkTab(tab, link, true) }
+                labels.add("Open in background tab")
+                acts.add { openLinkTab(tab, link, false) }
+                if (!tab.isPrivate) {
+                    labels.add("Open in private tab")
+                    acts.add {
+                        requirePrivate {
+                            val t = createTab(true)
+                            homePrivate = true
+                            openInTab(t, link)
+                        }
+                    }
+                }
+            }
+            labels.add("Copy link")
+            acts.add { copyText(link) }
+            if (web) {
+                labels.add("Share link")
+                acts.add { shareText(link) }
+            }
+        }
+        if (image != null) {
+            val web = image.startsWith("http://") || image.startsWith("https://")
+            if (web) {
+                labels.add("Download image")
+                acts.add { onPageDownload(tab, image, tab.mobileUa.ifEmpty { null }, null, null, -1L) }
+                if (link == null) {
+                    labels.add("Open image in new tab")
+                    acts.add { openLinkTab(tab, image, true) }
+                }
+            }
+            labels.add("Copy image address")
+            acts.add { copyText(image) }
+        }
+        AlertDialog.Builder(this)
+            .setTitle(if (shown.length > 70) shown.take(67) + "..." else shown)
+            .setItems(labels.toTypedArray()) { _, i -> acts[i]() }
+            .setNegativeButton("Cancel", null)
+            .show()
+    }
+
+    // ---------- Address bar suggestions ----------
+
+    private class Sug(val text: String, val sub: String, val local: Boolean, val target: String)
+
+    private val sugRunnable = Runnable { fetchSuggestions() }
+
+    private fun setupSuggestions() {
+        urlBar.setSelectAllOnFocus(true)
+        for (edit in listOf(homeSearch, urlBar)) {
+            edit.addTextChangedListener(object : TextWatcher {
+                override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
+                override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {}
+                override fun afterTextChanged(s: Editable?) {
+                    onTyping(edit)
+                }
+            })
+            edit.setOnFocusChangeListener { _, has ->
+                if (!has) hideSuggestions()
+            }
+        }
+        suggestCard.setOnClickListener { }
+    }
+
+    private fun onTyping(edit: EditText) {
+        sugSeq++
+        val q = edit.text.toString().trim()
+        if (!edit.hasFocus() || q.isEmpty()) {
+            hideSuggestions()
+            return
+        }
+        sugAnchor = edit
+        showSuggestions(q, emptyList())
+        uiHandler.removeCallbacks(sugRunnable)
+        if (Settings.searchSuggestions) uiHandler.postDelayed(sugRunnable, 220)
+    }
+
+    private fun fetchSuggestions() {
+        val edit = sugAnchor ?: return
+        val q = edit.text.toString().trim()
+        if (q.isEmpty() || !Settings.searchSuggestions || !edit.hasFocus()) return
+        if (q.startsWith("http://") || q.startsWith("https://")) return
+        val seq = sugSeq
+        sugExec.execute {
+            val res = try {
+                SearchEngines.suggestions(q)
+            } catch (_: Exception) {
+                emptyList<String>()
+            }
+            uiHandler.post {
+                if (seq == sugSeq && edit.hasFocus() && edit.text.toString().trim() == q) {
+                    showSuggestions(q, res)
+                }
+            }
+        }
+    }
+
+    private fun showSuggestions(q: String, net: List<String>) {
+        val edit = sugAnchor ?: return
+        val rows = ArrayList<Sug>()
+        val looksLikeSite = !q.contains(" ") && (q.contains(".") || q.startsWith("http"))
+        rows.add(
+            if (looksLikeSite) Sug(q, "Go to site", false, resolveUrl(q))
+            else Sug(q, SearchEngines.current().name, false, resolveUrl(q))
+        )
+
+        // Pages you already have: open tabs, shortcuts, recent
+        val low = q.lowercase()
+        val seen = HashSet<String>()
+        val local = ArrayList<Sug>()
+        for (t in tabs) {
+            if (t.isPrivate || !t.url.startsWith("http")) continue
+            if (t.title.lowercase().contains(low) || t.url.lowercase().contains(low)) {
+                if (seen.add(t.url)) local.add(Sug(t.title.ifBlank { hostOf(t.url) }, hostOf(t.url) + "  •  open tab", true, t.url))
+            }
+        }
+        for (s in StartPage.all()) {
+            if (s.title.lowercase().contains(low) || s.url.lowercase().contains(low)) {
+                if (seen.add(s.url)) local.add(Sug(s.title, hostOf(s.url) + "  •  shortcut", true, s.url))
+            }
+        }
+        for (r in loadRecent()) {
+            if (r.title.lowercase().contains(low) || r.url.lowercase().contains(low)) {
+                if (seen.add(r.url)) local.add(Sug(r.title, hostOf(r.url), true, r.url))
+            }
+        }
+        for (s in local.take(3)) rows.add(s)
+        for (s in net) {
+            if (rows.size >= 9) break
+            if (!s.equals(q, ignoreCase = true)) rows.add(Sug(s, "", false, resolveUrl(s)))
+        }
+
+        suggestList.removeAllViews()
+        for (r in rows) {
+            val v = layoutInflater.inflate(R.layout.item_suggest, suggestList, false)
+            v.findViewById<TextView>(R.id.sugText).text = r.text
+            val sub = v.findViewById<TextView>(R.id.sugSub)
+            sub.text = r.sub
+            sub.visibility = if (r.sub.isEmpty()) View.GONE else View.VISIBLE
+            v.findViewById<ImageView>(R.id.sugIcon).setImageResource(
+                if (r.local) R.drawable.ic_history else R.drawable.ic_search_small
+            )
+            v.setOnClickListener {
+                hideSuggestions()
+                hideKeyboard()
+                go(edit, r.target)
+            }
+            suggestList.addView(v)
+        }
+        placeSuggestCard(if (edit === homeSearch) (edit.parent as View) else urlRow)
+        suggestCard.visibility = View.VISIBLE
+    }
+
+    private fun placeSuggestCard(anchor: View) {
+        val frame = suggestCard.parent as View
+        val a = IntArray(2)
+        val f = IntArray(2)
+        anchor.getLocationInWindow(a)
+        frame.getLocationInWindow(f)
+        val lp = suggestCard.layoutParams as FrameLayout.LayoutParams
+        lp.topMargin = a[1] - f[1] + anchor.height + dp(6)
+        suggestCard.layoutParams = lp
+    }
+
+    private fun hideSuggestions() {
+        sugSeq++
+        uiHandler.removeCallbacks(sugRunnable)
+        if (::suggestCard.isInitialized) suggestCard.visibility = View.GONE
+    }
+
+    // ---------- Search engine ----------
+
+    private fun showEngineDialog() {
+        val engines = SearchEngines.all()
+        val cur = SearchEngines.current().name
+        val labels = ArrayList<String>()
+        for (e in engines) {
+            labels.add((if (e.name == cur) "✓   " else "      ") + e.name + (if (e.custom) "   (custom)" else ""))
+        }
+        labels.add("+   Add a search engine…")
+        val hasCustom = engines.any { it.custom }
+        if (hasCustom) labels.add("−   Remove a custom engine…")
+        AlertDialog.Builder(this)
+            .setTitle("Search engine")
+            .setItems(labels.toTypedArray()) { _, i ->
+                when {
+                    i < engines.size -> {
+                        SearchEngines.setCurrent(engines[i].name)
+                        bindSettings()
+                    }
+                    i == engines.size -> showAddEngine()
+                    else -> showRemoveEngine()
+                }
+            }
+            .setNegativeButton("Cancel", null)
+            .show()
+    }
+
+    private fun showAddEngine() {
+        promptTwo(
+            "Add search engine",
+            "Name",
+            "",
+            "Search address with %s  (https://site.com/?q=%s)",
+            ""
+        ) { name, url ->
+            val err = SearchEngines.addCustom(name, url)
+            if (err == null) {
+                SearchEngines.setCurrent(name)
+                bindSettings()
+                toast("$name is now your search engine")
+            }
+            err
+        }
+    }
+
+    private fun showRemoveEngine() {
+        val customs = SearchEngines.all().filter { it.custom }
+        if (customs.isEmpty()) return
+        val names = Array(customs.size) { customs[it].name }
+        AlertDialog.Builder(this)
+            .setTitle("Remove which engine?")
+            .setItems(names) { _, i ->
+                SearchEngines.removeCustom(names[i])
+                bindSettings()
+            }
+            .setNegativeButton("Cancel", null)
+            .show()
+    }
+
+    // ---------- Start page ----------
+
+    private fun renderShortcuts() {
+        val show = Settings.showShortcuts && !homePrivate
+        shortcutsSection.visibility = if (show) View.VISIBLE else View.GONE
+        if (!show) return
+        shortcutsGrid.removeAllViews()
+        val items = StartPage.all()
+        val cells = ArrayList<View>()
+        for ((i, s) in items.withIndex()) {
+            val letter = (s.title.ifBlank { hostOf(s.url) }).take(1).uppercase()
+            cells.add(
+                shortcutTile(
+                    s.title.ifBlank { hostOf(s.url) },
+                    letter,
+                    { openFromHome(s.url) },
+                    { showShortcutMenu(i) }
+                )
+            )
+        }
+        if (items.size < StartPage.MAX) {
+            cells.add(shortcutTile("Add", "+", { showShortcutEditor(-1) }, null))
+        }
+        var row: LinearLayout? = null
+        for ((i, c) in cells.withIndex()) {
+            if (i % 4 == 0) {
+                val r = LinearLayout(this)
+                r.orientation = LinearLayout.HORIZONTAL
+                r.weightSum = 4f
+                shortcutsGrid.addView(
+                    r,
+                    LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT)
+                )
+                row = r
+            }
+            row?.addView(c, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+        }
+        val rem = cells.size % 4
+        if (rem != 0) {
+            for (k in rem until 4) {
+                row?.addView(View(this), LinearLayout.LayoutParams(0, 1, 1f))
+            }
+        }
+    }
+
+    private fun shortcutTile(label: String, letter: String, click: () -> Unit, longClick: (() -> Unit)?): View {
+        val box = LinearLayout(this)
+        box.orientation = LinearLayout.VERTICAL
+        box.gravity = Gravity.CENTER_HORIZONTAL
+        box.setPadding(dp(2), dp(8), dp(2), dp(8))
+        box.isClickable = true
+        box.isFocusable = true
+
+        val av = TextView(this)
+        av.text = letter
+        av.gravity = Gravity.CENTER
+        av.setTextColor(color(R.color.vio_accent))
+        av.textSize = 18f
+        av.typeface = android.graphics.Typeface.DEFAULT_BOLD
+        av.setBackgroundResource(R.drawable.bg_avatar)
+        box.addView(av, LinearLayout.LayoutParams(dp(48), dp(48)))
+
+        val tv = TextView(this)
+        tv.text = label
+        tv.maxLines = 1
+        tv.ellipsize = android.text.TextUtils.TruncateAt.END
+        tv.textSize = 12f
+        tv.gravity = Gravity.CENTER
+        tv.setTextColor(color(R.color.vio_text))
+        val lp = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT)
+        lp.topMargin = dp(6)
+        box.addView(tv, lp)
+
+        box.setOnClickListener { click() }
+        if (longClick != null) {
+            box.setOnLongClickListener {
+                longClick()
+                true
+            }
+        }
+        return box
+    }
+
+    private fun showShortcutMenu(index: Int) {
+        val labels = arrayOf("Edit", "Move left", "Move right", "Remove")
+        AlertDialog.Builder(this)
+            .setItems(labels) { _, i ->
+                when (i) {
+                    0 -> showShortcutEditor(index)
+                    1 -> {
+                        StartPage.move(index, -1)
+                        renderShortcuts()
+                    }
+                    2 -> {
+                        StartPage.move(index, 1)
+                        renderShortcuts()
+                    }
+                    else -> {
+                        StartPage.remove(index)
+                        renderShortcuts()
+                    }
+                }
+            }
+            .setNegativeButton("Cancel", null)
+            .show()
+    }
+
+    private fun showShortcutEditor(index: Int) {
+        val cur = if (index >= 0) StartPage.all().getOrNull(index) else null
+        promptTwo(
+            if (cur == null) "Add shortcut" else "Edit shortcut",
+            "Name",
+            cur?.title ?: "",
+            "Web address (example.com)",
+            cur?.url ?: ""
+        ) { name, url ->
+            val err = if (cur == null) StartPage.add(name, url) else StartPage.update(index, name, url)
+            if (err == null) renderShortcuts()
+            err
+        }
+    }
+
+    private fun askGreetName() {
+        promptText("Name in the greeting", "Your name (empty = no name)", Settings.greetName, true) { n ->
+            Settings.greetName = n
+            bindSettings()
+        }
+    }
+
+    // ---------- Website permissions ----------
+
+    private fun hasOsPermission(p: Perm): Boolean {
+        fun ok(name: String) = ContextCompat.checkSelfPermission(this, name) == PackageManager.PERMISSION_GRANTED
+        return when (p) {
+            Perm.CAMERA -> ok(Manifest.permission.CAMERA)
+            Perm.MIC -> ok(Manifest.permission.RECORD_AUDIO)
+            Perm.LOCATION -> ok(Manifest.permission.ACCESS_FINE_LOCATION) || ok(Manifest.permission.ACCESS_COARSE_LOCATION)
+        }
+    }
+
+    /** Asks the phone for camera / microphone / location if Vio doesn't have it yet. */
+    private fun ensureOsPermissions(needs: List<Perm>, done: (Boolean) -> Unit) {
+        val missing = ArrayList<String>()
+        for (p in needs) {
+            if (hasOsPermission(p)) continue
+            when (p) {
+                Perm.CAMERA -> missing.add(Manifest.permission.CAMERA)
+                Perm.MIC -> missing.add(Manifest.permission.RECORD_AUDIO)
+                Perm.LOCATION -> {
+                    missing.add(Manifest.permission.ACCESS_FINE_LOCATION)
+                    missing.add(Manifest.permission.ACCESS_COARSE_LOCATION)
+                }
+            }
+        }
+        if (missing.isEmpty()) {
+            done(true)
+            return
+        }
+        if (pendingSiteAction != null) {
+            done(false)
+            return
+        }
+        pendingSiteAction = { _ -> done(needs.all { hasOsPermission(it) }) }
+        suppressLock = true
+        sitePermLauncher.launch(missing.toTypedArray())
+    }
+
+    /** A page wants the camera / microphone / location: uses what you decided for that site, or asks. */
+    private fun askSitePermissions(tab: Tab, origin: String, needs: List<Perm>, done: (Boolean) -> Unit) {
+        val host = hostOf(origin)
+        val priv = tab.isPrivate
+        val decisions = needs.map { SitePermissions.get(host, it, priv) }
+        if (decisions.any { it == Decision.BLOCK }) {
+            done(false)
+            return
+        }
+        if (decisions.all { it == Decision.ALLOW }) {
+            ensureOsPermissions(needs, done)
+            return
+        }
+        val what = needs.joinToString(" and ") { it.label.lowercase() }
+        val remember = CheckBox(this)
+        remember.text = if (priv) "Remember until Vio closes" else "Remember for this site"
+        remember.isChecked = true
+        val box = FrameLayout(this)
+        box.setPadding(dp(20), dp(8), dp(20), 0)
+        box.addView(
+            remember,
+            FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT)
+        )
+        AlertDialog.Builder(this)
+            .setTitle("$host wants to use your $what")
+            .setView(box)
+            .setPositiveButton("Allow") { _, _ ->
+                if (remember.isChecked) for (p in needs) SitePermissions.set(host, p, Decision.ALLOW, priv)
+                ensureOsPermissions(needs, done)
+            }
+            .setNegativeButton("Block") { _, _ ->
+                if (remember.isChecked) for (p in needs) SitePermissions.set(host, p, Decision.BLOCK, priv)
+                done(false)
+            }
+            .setOnCancelListener { done(false) }
+            .show()
+    }
+
+    private fun showSiteDialog() {
+        val tab = currentTab ?: return
+        val host = hostOf(tab.url)
+        if (host.isEmpty()) return
+        showSiteSettings(host, tab)
+    }
+
+    private fun showSiteSettings(host: String, tab: Tab?) {
+        val priv = tab?.isPrivate == true
+        val labels = ArrayList<String>()
+        val acts = ArrayList<() -> Unit>()
+        if (tab != null) {
+            labels.add("Desktop site:   " + if (tab.desktop) "On" else "Off")
+            acts.add {
+                toggleDesktop(tab)
+                showSiteSettings(host, tab)
+            }
+        }
+        for (p in Perm.values()) {
+            val d = SitePermissions.get(host, p, priv)
+            labels.add(p.label + ":   " + d.label)
+            acts.add {
+                SitePermissions.set(host, p, Decision.values()[(d.ordinal + 1) % Decision.values().size], priv)
+                showSiteSettings(host, tab)
+            }
+        }
+        labels.add("Reset this site")
+        acts.add {
+            SitePermissions.reset(host)
+            if (priv) for (p in Perm.values()) SitePermissions.set(host, p, Decision.ASK, true)
+            toast("Permissions reset for $host")
+            showSiteSettings(host, tab)
+        }
+        val secure = tab != null && tab.url.startsWith("https://")
+        val title = if (tab == null) host else host + (if (secure) "   •   secure" else "   •   not secure")
+        AlertDialog.Builder(this)
+            .setTitle(title)
+            .setItems(labels.toTypedArray()) { _, i -> acts[i]() }
+            .setNegativeButton(if (tab == null) "Back" else "Close") { _, _ ->
+                if (tab == null) showPermManager()
+            }
+            .show()
+    }
+
+    private fun permSummary(host: String): String {
+        val parts = ArrayList<String>()
+        for (p in Perm.values()) {
+            val d = SitePermissions.get(host, p)
+            if (d != Decision.ASK) parts.add(p.label + " " + d.label.lowercase())
+        }
+        return parts.joinToString(", ")
+    }
+
+    private fun showPermManager() {
+        val hosts = SitePermissions.savedHosts()
+        if (hosts.isEmpty()) {
+            AlertDialog.Builder(this)
+                .setTitle("Website permissions")
+                .setMessage(
+                    "No saved choices yet.\n\nWhen a site asks for your camera, microphone or location " +
+                        "and you tick \"Remember\", it shows up here. You can also set them from the " +
+                        "icon at the left of the address bar."
+                )
+                .setPositiveButton("OK", null)
+                .show()
+            return
+        }
+        val labels = Array(hosts.size) { hosts[it] + "\n" + permSummary(hosts[it]) }
+        AlertDialog.Builder(this)
+            .setTitle("Website permissions")
+            .setItems(labels) { _, i -> showSiteSettings(hosts[i], null) }
+            .setNeutralButton("Reset all") { _, _ ->
+                SitePermissions.resetAll()
+                toast("All site permissions reset")
+                bindSettings()
+            }
+            .setNegativeButton("Close", null)
+            .show()
+    }
+
+    // ---------- QR scanner ----------
+
+    private fun startScan() {
+        val o = ScanOptions()
+        o.setPrompt("Point the camera at a QR code")
+        o.setBeepEnabled(false)
+        o.setOrientationLocked(false)
+        suppressLock = true
+        try {
+            scanLauncher.launch(o)
+        } catch (_: Exception) {
+            suppressLock = false
+            toast("Couldn't open the scanner")
+        }
+    }
+
+    private fun onScanned(text: String) {
+        val t = text.trim()
+        val isUrl = t.startsWith("http://") || t.startsWith("https://")
+        val looksLikeSite = !isUrl && !t.contains(" ") && !t.contains("\n") && t.contains(".")
+        val b = AlertDialog.Builder(this)
+            .setTitle("QR code")
+            .setMessage(if (t.length > 500) t.take(500) + "..." else t)
+        if (isUrl || looksLikeSite) {
+            b.setPositiveButton("Open") { _, _ -> openScanned(if (isUrl) t else "https://$t") }
+        } else {
+            b.setPositiveButton("Search") { _, _ -> openScanned(SearchEngines.searchUrl(t)) }
+        }
+        b.setNeutralButton("Copy") { _, _ -> copyText(t) }
+        b.setNegativeButton("Close", null)
+        b.show()
+    }
+
+    private fun openScanned(url: String) {
+        val priv = if (screen == Screen.HOME) homePrivate else (screen == Screen.BROWSE && currentTab?.isPrivate == true)
+        val t = createTab(priv)
+        homePrivate = priv
+        openInTab(t, url)
+    }
+
+    // ---------- Browse menu and full screen ----------
+
+    private fun showBrowseMenu() {
+        val tab = currentTab ?: return
+        val labels = ArrayList<String>()
+        val acts = ArrayList<() -> Unit>()
+        labels.add("New tab")
+        acts.add { newTab(false) }
+        labels.add("New private tab")
+        acts.add { newTab(true) }
+        val last = TabStore.closed().firstOrNull()
+        if (last != null) {
+            labels.add("Reopen closed tab")
+            acts.add { reopenClosed(last) }
+        }
+        labels.add(if (tab.desktop) "Mobile site" else "Desktop site")
+        acts.add { toggleDesktop(tab) }
+        if (!tab.isPrivate) {
+            labels.add(if (tab.pinned) "Unpin tab" else "Pin tab")
+            acts.add { togglePin(tab) }
+        }
+        labels.add(if (tab.group == null) "Add tab to group…" else "Move tab to group…")
+        acts.add { pickGroup(tab) }
+        if (!tab.isPrivate && tab.url.startsWith("http")) {
+            labels.add("Add to start page")
+            acts.add {
+                val err = StartPage.add(tab.title.ifBlank { hostOf(tab.url) }, tab.url)
+                toast(err ?: "Added to your start page")
+            }
+        }
+        labels.add("Full screen")
+        acts.add { setBrowseFullscreen(true) }
+        labels.add("Scan QR code")
+        acts.add { startScan() }
+        if (tab.url.startsWith("http")) {
+            labels.add("Copy link")
+            acts.add { copyText(tab.url) }
+            labels.add("Share link")
+            acts.add { shareText(tab.url) }
+            labels.add("Site settings")
+            acts.add { showSiteDialog() }
+        }
+        AlertDialog.Builder(this)
+            .setItems(labels.toTypedArray()) { _, i -> acts[i]() }
+            .setNegativeButton("Cancel", null)
+            .show()
+    }
+
+    /** Full screen browsing: hides the address bar, the bottom bar and the phone's own bars. */
+    private fun setBrowseFullscreen(on: Boolean) {
+        if (browseFs == on) return
+        browseFs = on
+        urlRow.visibility = if (on) View.GONE else View.VISIBLE
+        bottomNav.visibility = if (on) View.GONE else View.VISIBLE
+        navDivider.visibility = if (on) View.GONE else View.VISIBLE
+        fsExit.visibility = if (on) View.VISIBLE else View.GONE
+        hideSuggestions()
+        @Suppress("DEPRECATION")
+        run {
+            if (on) {
+                browseFsFlags = window.decorView.systemUiVisibility
+                window.decorView.systemUiVisibility = View.SYSTEM_UI_FLAG_LAYOUT_STABLE or
+                    View.SYSTEM_UI_FLAG_FULLSCREEN or
+                    View.SYSTEM_UI_FLAG_HIDE_NAVIGATION or
+                    View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY
+            } else {
+                window.decorView.systemUiVisibility = browseFsFlags
+            }
+        }
+    }
+
+    // ---------- Swipe from the screen edge: back / forward ----------
+
+    override fun dispatchTouchEvent(ev: MotionEvent): Boolean {
+        if (ev.actionMasked == MotionEvent.ACTION_DOWN) {
+            swipeActive = false
+            swipeDone = false
+        }
+        if (screen == Screen.BROWSE && Settings.swipeNav && customView == null) {
+            val density = resources.displayMetrics.density
+            when (ev.actionMasked) {
+                MotionEvent.ACTION_DOWN -> {
+                    val edge = 26 * density
+                    val loc = IntArray(2)
+                    webContainer.getLocationOnScreen(loc)
+                    val inside = ev.rawY >= loc[1] && ev.rawY <= loc[1] + webContainer.height
+                    val width = resources.displayMetrics.widthPixels
+                    if (inside && (ev.rawX <= edge || ev.rawX >= width - edge)) {
+                        swipeActive = true
+                        swipeFromLeft = ev.rawX <= edge
+                        swipeX = ev.rawX
+                        swipeY = ev.rawY
+                    }
+                }
+                MotionEvent.ACTION_MOVE -> if (swipeActive && !swipeDone) {
+                    val dx = ev.rawX - swipeX
+                    val dy = ev.rawY - swipeY
+                    val good = if (swipeFromLeft) dx > 72 * density else -dx > 72 * density
+                    if (good && Math.abs(dy) < Math.abs(dx) * 0.6f) {
+                        swipeDone = true
+                        swipeActive = false
+                        val cancel = MotionEvent.obtain(ev)
+                        cancel.action = MotionEvent.ACTION_CANCEL
+                        super.dispatchTouchEvent(cancel)
+                        cancel.recycle()
+                        swipeNavigate(swipeFromLeft)
+                        return true
+                    } else if (Math.abs(dy) > 40 * density && Math.abs(dy) > Math.abs(dx)) {
+                        swipeActive = false
+                    }
+                }
+                MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
+                    swipeActive = false
+                    if (swipeDone) {
+                        swipeDone = false
+                        return true
+                    }
+                }
+            }
+            if (swipeDone) return true
+        }
+        return super.dispatchTouchEvent(ev)
+    }
+
+    private fun swipeNavigate(back: Boolean) {
+        val wv = currentTab?.webView ?: return
+        if (back) {
+            if (wv.canGoBack()) {
+                wv.goBack()
+                webContainer.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
+            }
+        } else if (wv.canGoForward()) {
+            wv.goForward()
+            webContainer.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
+        }
     }
 
     // ---------- File downloads from pages ----------
@@ -912,8 +1976,16 @@ class MainActivity : AppCompatActivity() {
     private fun switchTo(tab: Tab) {
         currentTab = tab
         tab.lastUsed = System.currentTimeMillis()
+        hideSuggestions()
         for (t in tabs) {
-            t.webView.visibility = if (t === tab) View.VISIBLE else View.GONE
+            t.holder?.visibility = if (t === tab) View.VISIBLE else View.GONE
+        }
+        tab.refresher?.isEnabled = Settings.pullRefresh
+        val pending = tab.pendingLoad
+        if (pending != null) {
+            tab.pendingLoad = null
+            syncDesktop(tab, pending)
+            tab.webView.loadUrl(pending)
         }
         urlBar.setText(tab.url)
         loadingBar.visibility = View.GONE
@@ -922,8 +1994,11 @@ class MainActivity : AppCompatActivity() {
         updateUi()
     }
 
-    private fun closeTab(tab: Tab) {
+    private fun closeTab(tab: Tab, remember: Boolean = true) {
         if (!tabs.remove(tab)) return
+        if (remember && !tab.isPrivate && tab.url.startsWith("http")) {
+            TabStore.pushClosed(tab.title.ifBlank { hostOf(tab.url) }, tab.url)
+        }
         try {
             tab.webView.stopLoading()
         } catch (_: Exception) {
@@ -934,8 +2009,11 @@ class MainActivity : AppCompatActivity() {
             } catch (_: Exception) {
             }
         }
-        webContainer.removeView(tab.webView)
+        (tab.webView.parent as? ViewGroup)?.removeView(tab.webView)
+        val holder = tab.holder
+        if (holder != null) webContainer.removeView(holder)
         tab.webView.destroy()
+        if (tab.pinned) persistPinned()
         if (currentTab === tab) {
             currentTab = tabs.maxByOrNull { it.lastUsed }
             hideDetectCard()
@@ -945,6 +2023,80 @@ class MainActivity : AppCompatActivity() {
     private fun closeMany(match: (Tab) -> Boolean) {
         val victims = tabs.filter { match(it) }
         for (t in victims) closeTab(t)
+    }
+
+    // ---------- Pinned tabs (kept for the next launch) ----------
+
+    private fun persistPinned() {
+        val list = ArrayList<SavedTab>()
+        for (t in tabs.filter { it.pinned && !it.isPrivate && it.url.startsWith("http") }.sortedBy { it.id }) {
+            list.add(SavedTab(t.title, t.url, t.group))
+        }
+        TabStore.savePinned(list)
+    }
+
+    /** Brings back last session's pinned tabs. Their pages load when you open them. */
+    private fun restorePinned() {
+        for (s in TabStore.pinned()) {
+            val t = createTab(false)
+            t.pinned = true
+            t.group = s.group
+            t.title = s.title
+            t.url = s.url
+            t.pendingLoad = s.url
+            t.lastUsed = 0L
+        }
+    }
+
+    private fun togglePin(tab: Tab) {
+        if (tab.isPrivate) {
+            toast("Private tabs can't be pinned")
+            return
+        }
+        tab.pinned = !tab.pinned
+        persistPinned()
+        toast(if (tab.pinned) "Tab pinned" else "Tab unpinned")
+    }
+
+    private fun reopenClosed(c: ClosedTab) {
+        TabStore.removeClosed(c.url)
+        val t = createTab(false)
+        openInTab(t, c.url)
+    }
+
+    // ---------- Desktop site ----------
+
+    private fun desktopUa(mobile: String): String {
+        val ver = Regex("Chrome/([0-9.]+)").find(mobile)?.groupValues?.get(1) ?: "120.0.0.0"
+        return "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/$ver Safari/537.36"
+    }
+
+    private fun applyDesktop(tab: Tab, on: Boolean) {
+        if (tab.desktop == on) return
+        tab.desktop = on
+        val st = tab.webView.settings
+        st.userAgentString = if (on) desktopUa(tab.mobileUa) else tab.mobileUa
+        st.useWideViewPort = if (on) true else tab.mobileWide
+        st.loadWithOverviewMode = if (on) true else tab.mobileOverview
+        tab.sniffer.userAgent = st.userAgentString
+    }
+
+    /** Before a page loads: desktop or mobile, depending on what you chose for that site. */
+    private fun syncDesktop(tab: Tab, url: String) {
+        val host = hostOf(url)
+        if (host.isEmpty()) return
+        val saved = Settings.isDesktop(host)
+        // A private tab keeps its own choice while you browse in it
+        applyDesktop(tab, if (tab.isPrivate) (tab.desktop || saved) else saved)
+    }
+
+    private fun toggleDesktop(tab: Tab) {
+        val on = !tab.desktop
+        val host = hostOf(tab.url)
+        if (!tab.isPrivate) Settings.setDesktop(host, on)
+        applyDesktop(tab, on)
+        if (tab.pendingLoad == null && tab.url.isNotEmpty()) tab.webView.reload()
+        toast(if (on) "Desktop site" else "Mobile site")
     }
 
     private fun newTab(isPrivate: Boolean) {
@@ -981,20 +2133,58 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun showCloseTabsDialog() {
-        val options = arrayOf("Close all tabs", "Close private tabs", "Close normal tabs")
+        val options = arrayOf(
+            "Close all tabs",
+            "Close private tabs",
+            "Close normal tabs",
+            "Clear recently closed list"
+        )
         AlertDialog.Builder(this)
-            .setTitle("Close tabs")
+            .setTitle("Close tabs (pinned tabs stay)")
             .setItems(options) { _, which ->
                 when (which) {
-                    0 -> closeMany { true }
+                    0 -> closeMany { !it.pinned }
                     1 -> closeMany { it.isPrivate }
-                    else -> closeMany { !it.isPrivate }
+                    2 -> closeMany { !it.isPrivate && !it.pinned }
+                    else -> TabStore.clearClosed()
                 }
                 renderTabs()
                 updateUi()
             }
             .setNegativeButton("Cancel", null)
             .show()
+    }
+
+    private fun matchesQuery(tab: Tab, q: String): Boolean {
+        // A locked private tab can't be found by what it shows
+        if (tab.isPrivate && Settings.lockPrivate && !privateUnlocked) return false
+        return tab.title.lowercase().contains(q) ||
+            tab.url.lowercase().contains(q) ||
+            (tab.group ?: "").lowercase().contains(q)
+    }
+
+    private fun sectionHeader(text: String, onClick: (() -> Unit)?): TextView {
+        val tv = TextView(this)
+        tv.text = text
+        tv.setTextColor(color(R.color.vio_accent))
+        tv.textSize = 12f
+        tv.typeface = android.graphics.Typeface.DEFAULT_BOLD
+        tv.setPadding(dp(4), dp(10), dp(4), dp(8))
+        if (onClick != null) {
+            tv.isClickable = true
+            tv.isFocusable = true
+            tv.setOnClickListener { onClick() }
+        }
+        return tv
+    }
+
+    private fun emptyNote(text: String): TextView {
+        val tv = TextView(this)
+        tv.text = text
+        tv.setTextColor(color(R.color.vio_subtext))
+        tv.textSize = 14f
+        tv.setPadding(0, dp(24), 0, dp(24))
+        return tv
     }
 
     private fun renderTabs() {
@@ -1005,64 +2195,233 @@ class MainActivity : AppCompatActivity() {
         }
 
         tabsList.removeAllViews()
+        tabsTitle.text = if (tabs.isEmpty()) "Tabs" else "Tabs (${tabs.size})"
+
+        if (tabFilter == 4) {
+            renderClosedTabs()
+            return
+        }
+
+        val q = tabQuery.trim().lowercase()
         val sorted = tabs.sortedByDescending { it.lastUsed }
-        val list = when (tabFilter) {
+        var list = when (tabFilter) {
             1 -> sorted.filter { !it.isPrivate }
             2 -> sorted.filter { it.isPrivate }
             3 -> sorted.take(5)
             else -> sorted
         }
+        if (q.isNotEmpty()) list = list.filter { matchesQuery(it, q) }
 
         if (list.isEmpty()) {
-            val tv = TextView(this)
-            tv.text = "No tabs here yet"
-            tv.setTextColor(color(R.color.vio_subtext))
-            tv.textSize = 14f
-            tv.setPadding(0, dp(24), 0, dp(24))
-            tabsList.addView(tv)
+            tabsList.addView(emptyNote(if (q.isNotEmpty()) "No tabs match \"" + tabQuery.trim() + "\"" else "No tabs here yet"))
+            return
         }
 
-        for (tab in list) {
-            val row = layoutInflater.inflate(R.layout.item_tab, tabsList, false)
-            val masked = tab.isPrivate && Settings.lockPrivate && !privateUnlocked
-            val title = when {
-                masked -> "Private tab"
-                tab.title.isNotBlank() -> tab.title
-                tab.isBlank -> "New tab"
-                else -> hostOf(tab.url)
-            }
-            val sub = when {
-                masked -> "Locked"
-                tab.isBlank && tab.isPrivate -> "Private tab"
-                tab.isBlank -> "Start page"
-                tab.isPrivate -> "Private • " + hostOf(tab.url)
-                else -> hostOf(tab.url)
-            }
-            row.findViewById<TextView>(R.id.tabTitle).text = title
-            row.findViewById<TextView>(R.id.tabHost).text = sub
+        // Searching or "Recent": one flat list. Otherwise: Pinned, groups, then the rest.
+        if (q.isNotEmpty() || tabFilter == 3) {
+            for (tab in list) tabsList.addView(tabRow(tab, true))
+            return
+        }
 
-            val letter = row.findViewById<TextView>(R.id.tabLetter)
-            val lock = row.findViewById<ImageView>(R.id.tabLock)
-            val avatar = row.findViewById<View>(R.id.tabAvatar)
-            if (tab.isPrivate) {
-                avatar.setBackgroundResource(R.drawable.bg_avatar_dark)
-                letter.visibility = View.GONE
-                lock.visibility = View.VISIBLE
-            } else {
-                letter.text = (if (tab.isBlank) "+" else hostOf(tab.url).take(1).uppercase())
-            }
+        val pinned = list.filter { it.pinned }.sortedBy { it.id }
+        val rest = list.filter { !it.pinned }
 
-            row.setBackgroundResource(
-                if (tab === currentTab) R.drawable.bg_card_current else R.drawable.bg_card
+        if (pinned.isNotEmpty()) {
+            tabsList.addView(sectionHeader("PINNED", null))
+            for (tab in pinned) tabsList.addView(tabRow(tab, false))
+        }
+
+        val groups = LinkedHashMap<String, MutableList<Tab>>()
+        for (t in rest) {
+            val g = t.group ?: continue
+            groups.getOrPut((if (t.isPrivate) "p:" else "n:") + g) { ArrayList() }.add(t)
+        }
+        for ((_, members) in groups) {
+            val first = members[0]
+            val name = first.group ?: continue
+            val priv = first.isPrivate
+            val label = name + (if (priv) "  •  Private" else "") + "  •  " + members.size + "   ⋯"
+            tabsList.addView(sectionHeader(label.uppercase()) { showGroupMenu(name, priv) })
+            for (tab in members) tabsList.addView(tabRow(tab, false))
+        }
+
+        val loose = rest.filter { it.group == null }
+        if (loose.isNotEmpty()) {
+            if (pinned.isNotEmpty() || groups.isNotEmpty()) tabsList.addView(sectionHeader("TABS", null))
+            for (tab in loose) tabsList.addView(tabRow(tab, false))
+        }
+    }
+
+    private fun tabRow(tab: Tab, flat: Boolean): View {
+        val row = layoutInflater.inflate(R.layout.item_tab, tabsList, false)
+        val masked = tab.isPrivate && Settings.lockPrivate && !privateUnlocked
+        val title = when {
+            masked -> "Private tab"
+            tab.title.isNotBlank() -> tab.title
+            tab.isBlank -> "New tab"
+            else -> hostOf(tab.url)
+        }
+        var sub = when {
+            masked -> "Locked"
+            tab.isBlank && tab.isPrivate -> "Private tab"
+            tab.isBlank -> "Start page"
+            tab.isPrivate -> "Private • " + hostOf(tab.url)
+            else -> hostOf(tab.url)
+        }
+        val g = tab.group
+        if (flat && g != null && !masked) sub = "$g • $sub"
+        row.findViewById<TextView>(R.id.tabTitle).text = title
+        row.findViewById<TextView>(R.id.tabHost).text = sub
+        row.findViewById<View>(R.id.tabPin).visibility = if (tab.pinned) View.VISIBLE else View.GONE
+
+        val letter = row.findViewById<TextView>(R.id.tabLetter)
+        val lock = row.findViewById<ImageView>(R.id.tabLock)
+        val avatar = row.findViewById<View>(R.id.tabAvatar)
+        if (tab.isPrivate) {
+            avatar.setBackgroundResource(R.drawable.bg_avatar_dark)
+            letter.visibility = View.GONE
+            lock.visibility = View.VISIBLE
+        } else {
+            letter.text = (if (tab.isBlank) "+" else hostOf(tab.url).take(1).uppercase())
+        }
+
+        row.setBackgroundResource(
+            if (tab === currentTab) R.drawable.bg_card_current else R.drawable.bg_card
+        )
+        row.setOnClickListener { openTab(tab) }
+        row.setOnLongClickListener {
+            showTabMenu(tab)
+            true
+        }
+        row.findViewById<View>(R.id.tabClose).setOnClickListener {
+            closeTab(tab)
+            renderTabs()
+            updateUi()
+        }
+        return row
+    }
+
+    private fun renderClosedTabs() {
+        val q = tabQuery.trim().lowercase()
+        val all = TabStore.closed().filter {
+            q.isEmpty() || it.title.lowercase().contains(q) || it.url.lowercase().contains(q)
+        }
+        if (all.isEmpty()) {
+            tabsList.addView(
+                emptyNote(if (q.isNotEmpty()) "No closed tabs match \"" + tabQuery.trim() + "\"" else "Tabs you close show up here")
             )
-            row.setOnClickListener { openTab(tab) }
+            return
+        }
+        tabsList.addView(sectionHeader("TAP TO REOPEN   •   CLEAR LIST") {
+            TabStore.clearClosed()
+            renderTabs()
+        })
+        for (c in all) {
+            val row = layoutInflater.inflate(R.layout.item_tab, tabsList, false)
+            row.findViewById<TextView>(R.id.tabTitle).text = c.title
+            row.findViewById<TextView>(R.id.tabHost).text = hostOf(c.url) + "  •  " + timeAgo(c.time)
+            row.findViewById<TextView>(R.id.tabLetter).text = hostOf(c.url).take(1).uppercase()
+            row.setBackgroundResource(R.drawable.bg_card)
+            row.setOnClickListener { reopenClosed(c) }
             row.findViewById<View>(R.id.tabClose).setOnClickListener {
-                closeTab(tab)
+                TabStore.removeClosed(c.url)
                 renderTabs()
-                updateUi()
             }
             tabsList.addView(row)
         }
+    }
+
+    // ---------- Tab menu, groups ----------
+
+    private fun showTabMenu(tab: Tab) {
+        val labels = ArrayList<String>()
+        val acts = ArrayList<() -> Unit>()
+        if (!tab.isPrivate) {
+            labels.add(if (tab.pinned) "Unpin tab" else "Pin tab")
+            acts.add {
+                togglePin(tab)
+                renderTabs()
+            }
+        }
+        labels.add(if (tab.group == null) "Add to group…" else "Move to group…")
+        acts.add { pickGroup(tab) }
+        if (tab.group != null) {
+            labels.add("Remove from group")
+            acts.add {
+                setGroup(tab, null)
+            }
+        }
+        labels.add("Close other tabs")
+        acts.add {
+            closeMany { it !== tab && !it.pinned }
+            renderTabs()
+            updateUi()
+        }
+        labels.add("Close tab")
+        acts.add {
+            closeTab(tab)
+            renderTabs()
+            updateUi()
+        }
+        AlertDialog.Builder(this)
+            .setItems(labels.toTypedArray()) { _, i -> acts[i]() }
+            .setNegativeButton("Cancel", null)
+            .show()
+    }
+
+    private fun setGroup(tab: Tab, name: String?) {
+        tab.group = name?.trim()?.take(24)?.ifEmpty { null }
+        if (tab.pinned) persistPinned()
+        renderTabs()
+    }
+
+    private fun pickGroup(tab: Tab) {
+        val names = ArrayList<String>()
+        for (t in tabs) {
+            val g = t.group
+            if (g != null && t.isPrivate == tab.isPrivate && !names.contains(g)) names.add(g)
+        }
+        val labels = ArrayList<String>(names)
+        labels.add("+  New group…")
+        AlertDialog.Builder(this)
+            .setTitle("Tab group")
+            .setItems(labels.toTypedArray()) { _, i ->
+                if (i < names.size) {
+                    setGroup(tab, names[i])
+                } else {
+                    promptText("New group", "Group name", "", false) { setGroup(tab, it) }
+                }
+            }
+            .setNegativeButton("Cancel", null)
+            .show()
+    }
+
+    private fun showGroupMenu(name: String, priv: Boolean) {
+        val labels = arrayOf("Rename group", "Ungroup tabs", "Close tabs in this group")
+        AlertDialog.Builder(this)
+            .setTitle(name)
+            .setItems(labels) { _, i ->
+                val members = tabs.filter { it.group == name && it.isPrivate == priv }
+                when (i) {
+                    0 -> promptText("Rename group", "Group name", name, false) { n ->
+                        for (t in members) t.group = n.take(24)
+                        if (members.any { it.pinned }) persistPinned()
+                        renderTabs()
+                    }
+                    1 -> {
+                        for (t in members) t.group = null
+                        if (members.any { it.pinned }) persistPinned()
+                        renderTabs()
+                    }
+                    else -> {
+                        closeMany { it.group == name && it.isPrivate == priv && !it.pinned }
+                        renderTabs()
+                        updateUi()
+                    }
+                }
+            }
+            .setNegativeButton("Cancel", null)
+            .show()
     }
 
     // ---------- Navigation / URL ----------
@@ -1070,7 +2429,11 @@ class MainActivity : AppCompatActivity() {
     private fun submit(edit: EditText) {
         val input = edit.text.toString().trim()
         if (input.isEmpty()) return
-        val url = resolveUrl(input)
+        hideSuggestions()
+        go(edit, resolveUrl(input))
+    }
+
+    private fun go(edit: EditText, url: String) {
         if (edit === homeSearch) {
             edit.setText("")
             openFromHome(url)
@@ -1082,8 +2445,8 @@ class MainActivity : AppCompatActivity() {
 
     private fun resolveUrl(input: String): String = when {
         input.startsWith("http://") || input.startsWith("https://") -> input
-        input.contains(" ") || !input.contains(".") ->
-            "https://www.google.com/search?q=" + java.net.URLEncoder.encode(input, "UTF-8")
+        input.startsWith("localhost") -> "http://$input"
+        input.contains(" ") || !input.contains(".") -> SearchEngines.searchUrl(input)
         else -> "https://$input"
     }
 
@@ -1098,18 +2461,41 @@ class MainActivity : AppCompatActivity() {
         openInTab(tab, url)
     }
 
-    private fun openInTab(tab: Tab, typed: String) {
+    /** Sets the tab up for [typed] (https upgrade, desktop or mobile) and returns the address to load. */
+    private fun prepareLoad(tab: Tab, typed: String): String {
         var url = typed
         val upgraded = if (tab.skipUpgradeUrl == typed) null else Shields.upgrade(typed)
         if (upgraded != null) {
             tab.httpFallback = typed
             url = upgraded
         }
+        tab.pendingLoad = null
         tab.url = url
+        syncDesktop(tab, url)
+        return url
+    }
+
+    private fun openInTab(tab: Tab, typed: String) {
+        val url = prepareLoad(tab, typed)
         switchTo(tab)
         showScreen(Screen.BROWSE, 1)
         tab.webView.loadUrl(url)
         hideKeyboard()
+    }
+
+    /** A link opened from [from]: in front, or quietly in the background. */
+    private fun openLinkTab(from: Tab, link: String, show: Boolean) {
+        val t = createTab(from.isPrivate)
+        t.group = from.group
+        if (show) {
+            openInTab(t, link)
+        } else {
+            t.lastUsed = from.lastUsed - 1
+            val url = prepareLoad(t, link)
+            t.webView.loadUrl(url)
+            updateUi()
+            toast("Opened in background")
+        }
     }
 
     private fun hideKeyboard() {
@@ -1704,6 +3090,8 @@ class MainActivity : AppCompatActivity() {
         val shieldHost = currentTab?.let { hostOf(it.url) } ?: ""
         val shieldOn = Settings.blockAds && !Settings.shieldsOffFor(shieldHost)
         btnShield.setColorFilter(color(if (shieldOn) R.color.vio_accent else R.color.vio_subtext))
+        val plainHttp = currentTab?.url?.startsWith("http://") == true
+        btnSite.setColorFilter(color(if (plainHttp) R.color.vio_red else R.color.vio_subtext))
 
         // Recording just started: tuck the card away so it isn't in the video
         if (rec && !lastRec && detectCard.visibility == View.VISIBLE) scheduleHide(2500)
@@ -2625,6 +4013,36 @@ class MainActivity : AppCompatActivity() {
         swFp.setOnCheckedChangeListener(null)
         swLockApp.setOnCheckedChangeListener(null)
         swLockPrivate.setOnCheckedChangeListener(null)
+        swSuggest.setOnCheckedChangeListener(null)
+        swSwipe.setOnCheckedChangeListener(null)
+        swPull.setOnCheckedChangeListener(null)
+        swShortcuts.setOnCheckedChangeListener(null)
+        swRecentHome.setOnCheckedChangeListener(null)
+
+        swSuggest.isChecked = Settings.searchSuggestions
+        swSwipe.isChecked = Settings.swipeNav
+        swPull.isChecked = Settings.pullRefresh
+        swShortcuts.isChecked = Settings.showShortcuts
+        swRecentHome.isChecked = Settings.showRecent
+        swSuggest.setOnCheckedChangeListener { _, c ->
+            Settings.searchSuggestions = c
+            if (!c) hideSuggestions()
+        }
+        swSwipe.setOnCheckedChangeListener { _, c -> Settings.swipeNav = c }
+        swPull.setOnCheckedChangeListener { _, c ->
+            Settings.pullRefresh = c
+            for (t in tabs) t.refresher?.isEnabled = c
+        }
+        swShortcuts.setOnCheckedChangeListener { _, c -> Settings.showShortcuts = c }
+        swRecentHome.setOnCheckedChangeListener { _, c -> Settings.showRecent = c }
+        findViewById<TextView>(R.id.rowEngineSub).text =
+            SearchEngines.current().name + "  •  tap to change"
+        findViewById<TextView>(R.id.rowGreetNameSub).text =
+            if (Settings.greetName.isEmpty()) "Not set  •  tap to set" else Settings.greetName
+        val savedSites = SitePermissions.savedHosts().size
+        findViewById<TextView>(R.id.rowPermsSub).text =
+            if (savedSites == 0) "Camera, microphone and location, site by site"
+            else "$savedSites saved site" + (if (savedSites == 1) "" else "s") + "  •  tap to manage"
 
         swAds.isChecked = Settings.blockAds
         swHttps.isChecked = Settings.httpsUpgrade

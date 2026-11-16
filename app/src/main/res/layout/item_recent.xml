@@ -17,7 +17,7 @@
             android:layout_width="match_parent"
             android:layout_height="match_parent"
             android:gravity="center"
-            android:textColor="@color/vio_accent"
+            android:textColor="?attr/vioAccent"
             android:textSize="17sp"
             android:textStyle="bold" />
     </FrameLayout>
@@ -36,7 +36,7 @@
             android:layout_height="wrap_content"
             android:ellipsize="end"
             android:maxLines="1"
-            android:textColor="@color/vio_text"
+            android:textColor="?attr/vioText"
             android:textSize="14sp"
             android:textStyle="bold" />
 
@@ -47,7 +47,7 @@
             android:layout_marginTop="2dp"
             android:ellipsize="end"
             android:maxLines="1"
-            android:textColor="@color/vio_subtext"
+            android:textColor="?attr/vioSubtext"
             android:textSize="12sp" />
     </LinearLayout>
 
@@ -55,7 +55,7 @@
         android:id="@+id/recentTime"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:textColor="@color/vio_subtext"
+        android:textColor="?attr/vioSubtext"
         android:textSize="12sp" />
 
     <ImageView
@@ -64,5 +64,5 @@
         android:layout_height="36dp"
         android:padding="8dp"
         android:src="@drawable/ic_more"
-        android:tint="@color/vio_subtext" />
+        android:tint="?attr/vioSubtext" />
 </LinearLayout>

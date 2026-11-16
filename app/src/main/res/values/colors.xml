@@ -1,16 +1,45 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <color name="vio_bg">#F6F6F8</color>
-    <color name="vio_surface">#FFFFFF</color>
-    <color name="vio_text">#111114</color>
-    <color name="vio_subtext">#8A8A93</color>
-    <color name="vio_border">#E8E8EE</color>
-    <color name="vio_accent">#4B42F0</color>
-    <color name="vio_accent_light">#ECEBFF</color>
+    <!-- Light palette -->
+    <color name="light_bg">#F6F6F8</color>
+    <color name="light_surface">#FFFFFF</color>
+    <color name="light_text">#111114</color>
+    <color name="light_subtext">#7C7C86</color>
+    <color name="light_border">#E8E8EE</color>
+    <color name="light_avatar">#F1F1F5</color>
+    <color name="light_dark">#111114</color>
+    <!-- Dark palette -->
+    <color name="dark_bg">#0D0D11</color>
+    <color name="dark_surface">#1A1A20</color>
+    <color name="dark_text">#F1F1F5</color>
+    <color name="dark_subtext">#9D9DA8</color>
+    <color name="dark_border">#2B2B34</color>
+    <color name="dark_avatar">#26262E</color>
+    <color name="dark_dark">#ECECF1</color>
+    <!-- Same in every theme -->
     <color name="vio_red">#EF4444</color>
-    <color name="vio_red_light">#FDECEC</color>
     <color name="vio_green">#16A34A</color>
-    <color name="vio_avatar">#F1F1F5</color>
-    <color name="vio_dark">#111114</color>
     <color name="ic_launcher_background">#000000</color>
+    <color name="on_light">#FFFFFF</color>
+    <color name="on_dark">#0B0B10</color>
+    <color name="acc_indigo">#4B42F0</color>
+    <color name="acc_indigo_dk">#8F89FF</color>
+    <color name="acc_blue">#1A67D2</color>
+    <color name="acc_blue_dk">#6AA6FF</color>
+    <color name="acc_teal">#0B8A7A</color>
+    <color name="acc_teal_dk">#34D3BE</color>
+    <color name="acc_green">#198A3A</color>
+    <color name="acc_green_dk">#4ADE80</color>
+    <color name="acc_orange">#D9560B</color>
+    <color name="acc_orange_dk">#FF9142</color>
+    <color name="acc_red">#D92D3A</color>
+    <color name="acc_red_dk">#FF7480</color>
+    <color name="acc_pink">#D61F7A</color>
+    <color name="acc_pink_dk">#FF7FBC</color>
+    <color name="acc_purple">#8B2FD0</color>
+    <color name="acc_purple_dk">#C58BFF</color>
+    <color name="acc_gold">#A66A00</color>
+    <color name="acc_gold_dk">#F5C542</color>
+    <color name="acc_slate">#4B5563</color>
+    <color name="acc_slate_dk">#AAB3C2</color>
 </resources>

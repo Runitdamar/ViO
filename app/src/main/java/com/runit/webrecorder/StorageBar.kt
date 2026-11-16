@@ -38,7 +38,7 @@ class StorageBar @JvmOverloads constructor(
         clip.addRoundRect(rect, r, r, Path.Direction.CW)
         canvas.save()
         canvas.clipPath(clip)
-        paint.color = 0xFFE8E8EE.toInt()
+        paint.color = VioTheme.attrColor(context, R.attr.vioBorder)
         canvas.drawRect(rect, paint)
         var total = freeBytes
         for (s in sizes) total += s

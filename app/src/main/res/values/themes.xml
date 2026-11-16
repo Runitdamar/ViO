@@ -1,13 +1,159 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
+    <!-- Base theme = light with the default accent. Overlays below re-skin it while the app runs. -->
     <style name="Theme.Vio" parent="Theme.AppCompat.Light.NoActionBar">
-        <item name="colorPrimary">@color/vio_accent</item>
-        <item name="colorPrimaryDark">@color/vio_bg</item>
-        <item name="colorAccent">@color/vio_accent</item>
-        <item name="android:windowBackground">@color/vio_bg</item>
-        <item name="android:statusBarColor">@color/vio_bg</item>
-        <item name="android:navigationBarColor">@color/vio_surface</item>
+        <item name="vioBg">@color/light_bg</item>
+        <item name="vioSurface">@color/light_surface</item>
+        <item name="vioText">@color/light_text</item>
+        <item name="vioSubtext">@color/light_subtext</item>
+        <item name="vioBorder">@color/light_border</item>
+        <item name="vioAvatar">@color/light_avatar</item>
+        <item name="vioDark">@color/light_dark</item>
+        <item name="vioAccent">@color/acc_indigo</item>
+        <item name="vioOnAccent">@color/on_light</item>
+        <item name="colorPrimary">?attr/vioAccent</item>
+        <item name="colorPrimaryDark">?attr/vioBg</item>
+        <item name="colorAccent">?attr/vioAccent</item>
+        <item name="android:windowBackground">?attr/vioBg</item>
+        <item name="android:statusBarColor">?attr/vioBg</item>
+        <item name="android:navigationBarColor">?attr/vioSurface</item>
         <item name="android:windowLightStatusBar">true</item>
         <item name="android:windowLightNavigationBar">true</item>
+        <item name="alertDialogTheme">@style/VioDialogLight</item>
     </style>
+
+    <style name="VioDialogLight" parent="Theme.AppCompat.Light.Dialog.Alert">
+        <item name="colorAccent">?attr/vioAccent</item>
+        <item name="colorBackgroundFloating">?attr/vioSurface</item>
+    </style>
+
+    <style name="VioDialogDark" parent="Theme.AppCompat.Dialog.Alert">
+        <item name="colorAccent">?attr/vioAccent</item>
+        <item name="colorBackgroundFloating">?attr/vioSurface</item>
+    </style>
+
+    <!-- Light / dark -->
+    <style name="VioLight" parent="ThemeOverlay.AppCompat.Light">
+        <item name="vioBg">@color/light_bg</item>
+        <item name="vioSurface">@color/light_surface</item>
+        <item name="vioText">@color/light_text</item>
+        <item name="vioSubtext">@color/light_subtext</item>
+        <item name="vioBorder">@color/light_border</item>
+        <item name="vioAvatar">@color/light_avatar</item>
+        <item name="vioDark">@color/light_dark</item>
+        <item name="colorPrimary">?attr/vioAccent</item>
+        <item name="colorAccent">?attr/vioAccent</item>
+        <item name="android:windowBackground">?attr/vioBg</item>
+        <item name="android:statusBarColor">?attr/vioBg</item>
+        <item name="android:navigationBarColor">?attr/vioSurface</item>
+        <item name="android:windowLightStatusBar">true</item>
+        <item name="android:windowLightNavigationBar">true</item>
+        <item name="alertDialogTheme">@style/VioDialogLight</item>
+    </style>
+
+    <style name="VioDark" parent="ThemeOverlay.AppCompat.Dark">
+        <item name="vioBg">@color/dark_bg</item>
+        <item name="vioSurface">@color/dark_surface</item>
+        <item name="vioText">@color/dark_text</item>
+        <item name="vioSubtext">@color/dark_subtext</item>
+        <item name="vioBorder">@color/dark_border</item>
+        <item name="vioAvatar">@color/dark_avatar</item>
+        <item name="vioDark">@color/dark_dark</item>
+        <item name="colorPrimary">?attr/vioAccent</item>
+        <item name="colorAccent">?attr/vioAccent</item>
+        <item name="android:windowBackground">?attr/vioBg</item>
+        <item name="android:statusBarColor">?attr/vioBg</item>
+        <item name="android:navigationBarColor">?attr/vioSurface</item>
+        <item name="android:windowLightStatusBar">false</item>
+        <item name="android:windowLightNavigationBar">false</item>
+        <item name="alertDialogTheme">@style/VioDialogDark</item>
+    </style>
+
+    <!-- Accent colours: one style for light themes, one for dark themes -->
+    <style name="VioAccent0">
+        <item name="vioAccent">@color/acc_indigo</item>
+        <item name="vioOnAccent">@color/on_light</item>
+    </style>
+    <style name="VioAccent0Dk">
+        <item name="vioAccent">@color/acc_indigo_dk</item>
+        <item name="vioOnAccent">@color/on_dark</item>
+    </style>
+    <style name="VioAccent1">
+        <item name="vioAccent">@color/acc_blue</item>
+        <item name="vioOnAccent">@color/on_light</item>
+    </style>
+    <style name="VioAccent1Dk">
+        <item name="vioAccent">@color/acc_blue_dk</item>
+        <item name="vioOnAccent">@color/on_dark</item>
+    </style>
+    <style name="VioAccent2">
+        <item name="vioAccent">@color/acc_teal</item>
+        <item name="vioOnAccent">@color/on_light</item>
+    </style>
+    <style name="VioAccent2Dk">
+        <item name="vioAccent">@color/acc_teal_dk</item>
+        <item name="vioOnAccent">@color/on_dark</item>
+    </style>
+    <style name="VioAccent3">
+        <item name="vioAccent">@color/acc_green</item>
+        <item name="vioOnAccent">@color/on_light</item>
+    </style>
+    <style name="VioAccent3Dk">
+        <item name="vioAccent">@color/acc_green_dk</item>
+        <item name="vioOnAccent">@color/on_dark</item>
+    </style>
+    <style name="VioAccent4">
+        <item name="vioAccent">@color/acc_orange</item>
+        <item name="vioOnAccent">@color/on_light</item>
+    </style>
+    <style name="VioAccent4Dk">
+        <item name="vioAccent">@color/acc_orange_dk</item>
+        <item name="vioOnAccent">@color/on_dark</item>
+    </style>
+    <style name="VioAccent5">
+        <item name="vioAccent">@color/acc_red</item>
+        <item name="vioOnAccent">@color/on_light</item>
+    </style>
+    <style name="VioAccent5Dk">
+        <item name="vioAccent">@color/acc_red_dk</item>
+        <item name="vioOnAccent">@color/on_dark</item>
+    </style>
+    <style name="VioAccent6">
+        <item name="vioAccent">@color/acc_pink</item>
+        <item name="vioOnAccent">@color/on_light</item>
+    </style>
+    <style name="VioAccent6Dk">
+        <item name="vioAccent">@color/acc_pink_dk</item>
+        <item name="vioOnAccent">@color/on_dark</item>
+    </style>
+    <style name="VioAccent7">
+        <item name="vioAccent">@color/acc_purple</item>
+        <item name="vioOnAccent">@color/on_light</item>
+    </style>
+    <style name="VioAccent7Dk">
+        <item name="vioAccent">@color/acc_purple_dk</item>
+        <item name="vioOnAccent">@color/on_dark</item>
+    </style>
+    <style name="VioAccent8">
+        <item name="vioAccent">@color/acc_gold</item>
+        <item name="vioOnAccent">@color/on_light</item>
+    </style>
+    <style name="VioAccent8Dk">
+        <item name="vioAccent">@color/acc_gold_dk</item>
+        <item name="vioOnAccent">@color/on_dark</item>
+    </style>
+    <style name="VioAccent9">
+        <item name="vioAccent">@color/acc_slate</item>
+        <item name="vioOnAccent">@color/on_light</item>
+    </style>
+    <style name="VioAccent9Dk">
+        <item name="vioAccent">@color/acc_slate_dk</item>
+        <item name="vioOnAccent">@color/on_dark</item>
+    </style>
+
+    <!-- App fonts -->
+    <style name="VioFont0"><item name="android:fontFamily">sans-serif</item></style>
+    <style name="VioFont1"><item name="android:fontFamily">serif</item></style>
+    <style name="VioFont2"><item name="android:fontFamily">monospace</item></style>
+    <style name="VioFont3"><item name="android:fontFamily">sans-serif-condensed</item></style>
 </resources>

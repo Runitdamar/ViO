@@ -32,7 +32,7 @@
             android:layout_height="wrap_content"
             android:ellipsize="end"
             android:maxLines="2"
-            android:textColor="@color/vio_text"
+            android:textColor="?attr/vioText"
             android:textSize="14sp"
             android:textStyle="bold" />
 
@@ -43,7 +43,7 @@
             android:layout_marginTop="2dp"
             android:ellipsize="end"
             android:maxLines="1"
-            android:textColor="@color/vio_subtext"
+            android:textColor="?attr/vioSubtext"
             android:textSize="12sp" />
     </LinearLayout>
 
@@ -55,5 +55,5 @@
         android:focusable="true"
         android:padding="8dp"
         android:src="@drawable/ic_more"
-        android:tint="@color/vio_subtext" />
+        android:tint="?attr/vioSubtext" />
 </LinearLayout>

@@ -32,7 +32,7 @@
             android:layout_height="wrap_content"
             android:ellipsize="end"
             android:maxLines="1"
-            android:textColor="@color/vio_text"
+            android:textColor="?attr/vioText"
             android:textSize="14sp"
             android:textStyle="bold" />
 
@@ -43,7 +43,7 @@
             android:layout_marginTop="2dp"
             android:ellipsize="end"
             android:maxLines="1"
-            android:textColor="@color/vio_subtext"
+            android:textColor="?attr/vioSubtext"
             android:textSize="12sp" />
 
         <TextView
@@ -52,7 +52,7 @@
             android:layout_height="wrap_content"
             android:ellipsize="end"
             android:maxLines="1"
-            android:textColor="@color/vio_subtext"
+            android:textColor="?attr/vioSubtext"
             android:textSize="12sp" />
 
         <ProgressBar
@@ -62,7 +62,7 @@
             android:layout_height="4dp"
             android:layout_marginTop="6dp"
             android:max="100"
-            android:progressTint="@color/vio_accent"
+            android:progressTint="?attr/vioAccent"
             android:visibility="gone" />
 
         <TextView
@@ -72,7 +72,7 @@
             android:layout_marginTop="4dp"
             android:ellipsize="end"
             android:maxLines="2"
-            android:textColor="@color/vio_accent"
+            android:textColor="?attr/vioAccent"
             android:textSize="12sp"
             android:visibility="gone" />
     </LinearLayout>
@@ -86,7 +86,7 @@
         android:focusable="true"
         android:padding="9dp"
         android:src="@drawable/ic_play"
-        android:tint="@color/vio_subtext" />
+        android:tint="?attr/vioSubtext" />
 
     <ImageView
         android:id="@+id/vAction"
@@ -97,7 +97,7 @@
         android:focusable="true"
         android:padding="9dp"
         android:src="@drawable/ic_pause"
-        android:tint="@color/vio_accent"
+        android:tint="?attr/vioAccent"
         android:visibility="gone" />
 
     <ImageView
@@ -109,14 +109,14 @@
         android:focusable="true"
         android:padding="9dp"
         android:src="@drawable/ic_close"
-        android:tint="@color/vio_subtext"
+        android:tint="?attr/vioSubtext"
         android:visibility="gone" />
 
     <CheckBox
         android:id="@+id/vCheck"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:buttonTint="@color/vio_accent"
+        android:buttonTint="?attr/vioAccent"
         android:clickable="false"
         android:focusable="false" />
 

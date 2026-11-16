@@ -5,8 +5,11 @@ import java.util.concurrent.atomic.AtomicBoolean
 import android.annotation.SuppressLint
 import android.content.Intent
 import android.content.pm.ActivityInfo
+import android.content.res.Configuration
 import android.content.pm.PackageManager
 import android.graphics.Bitmap
+import android.graphics.Color
+import android.graphics.drawable.GradientDrawable
 import android.media.projection.MediaProjectionManager
 import android.net.Uri
 import android.os.Build
@@ -22,6 +25,7 @@ import android.text.Spanned
 import android.text.TextWatcher
 import android.text.style.ForegroundColorSpan
 import android.util.LruCache
+import android.util.TypedValue
 import android.view.Gravity
 import android.view.HapticFeedbackConstants
 import android.view.MotionEvent
@@ -48,6 +52,8 @@ import android.widget.FrameLayout
 import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.ProgressBar
+import android.widget.ScrollView
+import android.widget.SeekBar
 import android.widget.TextView
 import android.widget.Toast
 import androidx.activity.OnBackPressedCallback
@@ -237,6 +243,17 @@ class MainActivity : AppCompatActivity() {
     private lateinit var swShortcuts: SwitchCompat
     private lateinit var swRecentHome: SwitchCompat
     private var tabQuery = ""
+    private lateinit var wallpaperView: ImageView
+    private lateinit var wallpaperScrim: View
+    private lateinit var homeContent: LinearLayout
+    private lateinit var homeBrandText: TextView
+    private lateinit var homeSearchRow: View
+    private lateinit var homeTiles: View
+    private lateinit var shortcutsHeader: TextView
+    private lateinit var recentHeader: TextView
+    private var appliedDark = false
+    private var navIndex = 0
+    private var barActive = false
     private var browseFs = false
     private var browseFsFlags = 0
     private var sugSeq = 0
@@ -331,6 +348,27 @@ class MainActivity : AppCompatActivity() {
         cb?.invoke(result)
     }
 
+    private val wallpaperPicker = registerForActivityResult(
+        ActivityResultContracts.GetContent()
+    ) { uri ->
+        suppressLock = false
+        if (uri != null) {
+            val appCtx = applicationContext
+            Thread {
+                val ok = Wallpaper.savePhoto(appCtx, uri)
+                uiHandler.post {
+                    if (ok) {
+                        Settings.wallpaperKind = 2
+                        bindSettings()
+                        toast("Wallpaper set. See it on the start page")
+                    } else {
+                        toast("Couldn't use that picture")
+                    }
+                }
+            }.start()
+        }
+    }
+
     private val scanLauncher = registerForActivityResult(ScanContract()) { res ->
         suppressLock = false
         val text = res?.contents
@@ -352,10 +390,15 @@ class MainActivity : AppCompatActivity() {
             Vault.cleanOrphans(appCtx)
             Vault.clearTemp(appCtx)
         }.start()
+        VioTheme.apply(this)
+        appliedDark = VioTheme.isDark(this)
         setContentView(R.layout.activity_main)
 
         bindViews()
         setupClicks()
+        VioTheme.applyBars(this)
+        applyToolbarLayout()
+        applyToolbarButtons()
 
         DownloadCenter.cleanTemp(this)
         DownloadCenter.onEvent = { msg ->
@@ -451,6 +494,14 @@ class MainActivity : AppCompatActivity() {
         suggestList = findViewById(R.id.suggestList)
         shortcutsSection = findViewById(R.id.shortcutsSection)
         shortcutsGrid = findViewById(R.id.shortcutsGrid)
+        wallpaperView = findViewById(R.id.wallpaperView)
+        wallpaperScrim = findViewById(R.id.wallpaperScrim)
+        homeContent = findViewById(R.id.homeContent)
+        homeBrandText = findViewById(R.id.homeBrandText)
+        homeSearchRow = findViewById(R.id.homeSearchRow)
+        homeTiles = findViewById(R.id.homeTiles)
+        shortcutsHeader = findViewById(R.id.shortcutsHeader)
+        recentHeader = findViewById(R.id.recentHeader)
         swSuggest = findViewById(R.id.swSuggest)
         swSwipe = findViewById(R.id.swSwipe)
         swPull = findViewById(R.id.swPull)
@@ -538,6 +589,18 @@ class MainActivity : AppCompatActivity() {
         findViewById<View>(R.id.rowEngine).setOnClickListener { showEngineDialog() }
         findViewById<View>(R.id.rowGreetName).setOnClickListener { askGreetName() }
         findViewById<View>(R.id.rowPerms).setOnClickListener { showPermManager() }
+        findViewById<View>(R.id.rowTheme).setOnClickListener { showThemeDialog() }
+        findViewById<View>(R.id.rowAccent).setOnClickListener { showAccentDialog() }
+        findViewById<View>(R.id.rowWallpaper).setOnClickListener { showWallpaperDialog() }
+        findViewById<View>(R.id.rowHomeLayout).setOnClickListener { showHomeLayoutDialog() }
+        findViewById<View>(R.id.rowToolbar).setOnClickListener { showToolbarDialog() }
+        findViewById<View>(R.id.rowGestures).setOnClickListener { showGesturesDialog() }
+        findViewById<View>(R.id.rowTextSize).setOnClickListener { showTextSizeDialog() }
+        findViewById<View>(R.id.rowFonts).setOnClickListener { showFontsDialog() }
+        tabCount.setOnLongClickListener {
+            runGesture(Gestures.get(GSlot.TABS_HOLD))
+            true
+        }
         tabsSearch.addTextChangedListener(object : TextWatcher {
             override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
             override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {}
@@ -667,6 +730,8 @@ class MainActivity : AppCompatActivity() {
 
     private fun showScreen(s: Screen, nav: Int) {
         screen = s
+        navIndex = nav
+        updateBars()
         homeView.visibility = if (s == Screen.HOME) View.VISIBLE else View.GONE
         browseView.visibility = if (s == Screen.BROWSE) View.VISIBLE else View.GONE
         tabsView.visibility = if (s == Screen.TABS) View.VISIBLE else View.GONE
@@ -675,7 +740,7 @@ class MainActivity : AppCompatActivity() {
         settingsView.visibility = if (s == Screen.SETTINGS) View.VISIBLE else View.GONE
 
         for (i in navIcons.indices) {
-            val c = color(if (i == nav) R.color.vio_accent else R.color.vio_subtext)
+            val c = color(if (i == nav) R.attr.vioAccent else R.attr.vioSubtext)
             navIcons[i].setColorFilter(c)
             navTexts[i].setTextColor(c)
         }
@@ -691,6 +756,7 @@ class MainActivity : AppCompatActivity() {
         when (s) {
             Screen.HOME -> {
                 applyHomeMode()
+                applyHomeLayout()
                 renderShortcuts()
                 renderRecent()
             }
@@ -710,6 +776,7 @@ class MainActivity : AppCompatActivity() {
             Screen.SETTINGS -> bindSettings()
             Screen.PLACEHOLDER -> {}
         }
+        applyWallpaper()
         updateUi()
     }
 
@@ -727,12 +794,12 @@ class MainActivity : AppCompatActivity() {
     private fun applyHomeMode() {
         if (homePrivate) {
             greeting.text = "Private browsing."
-            greeting.setTextColor(color(R.color.vio_accent))
+            greeting.setTextColor(color(R.attr.vioAccent))
             homeSubtitle.text = "Pages you visit here won't be saved to Recent"
             recentSection.visibility = View.GONE
         } else {
             greeting.text = greetingText()
-            greeting.setTextColor(color(R.color.vio_text))
+            greeting.setTextColor(color(R.attr.vioText))
             homeSubtitle.text = "Search the web or type a URL"
             recentSection.visibility = if (Settings.showRecent) View.VISIBLE else View.GONE
         }
@@ -769,6 +836,7 @@ class MainActivity : AppCompatActivity() {
         st.builtInZoomControls = true
         st.displayZoomControls = false
         st.setSupportMultipleWindows(true)
+        applyPageText(st)
         if (isPrivate) {
             st.cacheMode = WebSettings.LOAD_NO_CACHE
         }
@@ -1032,8 +1100,8 @@ class MainActivity : AppCompatActivity() {
             wv,
             ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT)
         )
-        holder.setColorSchemeColors(color(R.color.vio_accent))
-        holder.setProgressBackgroundColorSchemeColor(color(R.color.vio_surface))
+        holder.setColorSchemeColors(color(R.attr.vioAccent))
+        holder.setProgressBackgroundColorSchemeColor(color(R.attr.vioSurface))
         holder.setOnChildScrollUpCallback { _, _ -> wv.scrollY > 0 }
         holder.setOnRefreshListener {
             wv.reload()
@@ -1322,7 +1390,15 @@ class MainActivity : AppCompatActivity() {
         anchor.getLocationInWindow(a)
         frame.getLocationInWindow(f)
         val lp = suggestCard.layoutParams as FrameLayout.LayoutParams
-        lp.topMargin = a[1] - f[1] + anchor.height + dp(6)
+        if (anchor === urlRow && Settings.addressBottom) {
+            lp.gravity = Gravity.BOTTOM
+            lp.topMargin = 0
+            lp.bottomMargin = frame.height - (a[1] - f[1]) + dp(6)
+        } else {
+            lp.gravity = Gravity.TOP
+            lp.bottomMargin = 0
+            lp.topMargin = a[1] - f[1] + anchor.height + dp(6)
+        }
         suggestCard.layoutParams = lp
     }
 
@@ -1415,12 +1491,13 @@ class MainActivity : AppCompatActivity() {
         if (items.size < StartPage.MAX) {
             cells.add(shortcutTile("Add", "+", { showShortcutEditor(-1) }, null))
         }
+        val cols = Settings.shortcutCols
         var row: LinearLayout? = null
         for ((i, c) in cells.withIndex()) {
-            if (i % 4 == 0) {
+            if (i % cols == 0) {
                 val r = LinearLayout(this)
                 r.orientation = LinearLayout.HORIZONTAL
-                r.weightSum = 4f
+                r.weightSum = cols.toFloat()
                 shortcutsGrid.addView(
                     r,
                     LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT)
@@ -1429,9 +1506,9 @@ class MainActivity : AppCompatActivity() {
             }
             row?.addView(c, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
         }
-        val rem = cells.size % 4
+        val rem = cells.size % cols
         if (rem != 0) {
-            for (k in rem until 4) {
+            for (k in rem until cols) {
                 row?.addView(View(this), LinearLayout.LayoutParams(0, 1, 1f))
             }
         }
@@ -1448,7 +1525,7 @@ class MainActivity : AppCompatActivity() {
         val av = TextView(this)
         av.text = letter
         av.gravity = Gravity.CENTER
-        av.setTextColor(color(R.color.vio_accent))
+        av.setTextColor(color(R.attr.vioAccent))
         av.textSize = 18f
         av.typeface = android.graphics.Typeface.DEFAULT_BOLD
         av.setBackgroundResource(R.drawable.bg_avatar)
@@ -1460,7 +1537,7 @@ class MainActivity : AppCompatActivity() {
         tv.ellipsize = android.text.TextUtils.TruncateAt.END
         tv.textSize = 12f
         tv.gravity = Gravity.CENTER
-        tv.setTextColor(color(R.color.vio_text))
+        tv.setTextColor(if (wallpaperOn()) Color.WHITE else color(R.attr.vioText))
         val lp = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT)
         lp.topMargin = dp(6)
         box.addView(tv, lp)
@@ -1727,6 +1804,10 @@ class MainActivity : AppCompatActivity() {
         acts.add { newTab(false) }
         labels.add("New private tab")
         acts.add { newTab(true) }
+        if (Settings.hideBottomBar) {
+            labels.add("Start page")
+            acts.add { goHome() }
+        }
         val last = TabStore.closed().firstOrNull()
         if (last != null) {
             labels.add("Reopen closed tab")
@@ -1751,6 +1832,14 @@ class MainActivity : AppCompatActivity() {
         acts.add { setBrowseFullscreen(true) }
         labels.add("Scan QR code")
         acts.add { startScan() }
+        if (Settings.hideBtnShield) {
+            labels.add("Shields")
+            acts.add { showShieldDialog() }
+        }
+        if (Settings.hideBtnTools) {
+            labels.add("Video and download tools")
+            acts.add { showToolsCard() }
+        }
         if (tab.url.startsWith("http")) {
             labels.add("Copy link")
             acts.add { copyText(tab.url) }
@@ -1770,8 +1859,7 @@ class MainActivity : AppCompatActivity() {
         if (browseFs == on) return
         browseFs = on
         urlRow.visibility = if (on) View.GONE else View.VISIBLE
-        bottomNav.visibility = if (on) View.GONE else View.VISIBLE
-        navDivider.visibility = if (on) View.GONE else View.VISIBLE
+        updateBars()
         fsExit.visibility = if (on) View.VISIBLE else View.GONE
         hideSuggestions()
         @Suppress("DEPRECATION")
@@ -1788,48 +1876,70 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    // ---------- Swipe from the screen edge: back / forward ----------
+    // ---------- Swipes: screen edges and address bar ----------
 
     override fun dispatchTouchEvent(ev: MotionEvent): Boolean {
         if (ev.actionMasked == MotionEvent.ACTION_DOWN) {
             swipeActive = false
             swipeDone = false
+            barActive = false
         }
-        if (screen == Screen.BROWSE && Settings.swipeNav && customView == null) {
+        if (screen == Screen.BROWSE && customView == null) {
             val density = resources.displayMetrics.density
             when (ev.actionMasked) {
                 MotionEvent.ACTION_DOWN -> {
-                    val edge = 26 * density
                     val loc = IntArray(2)
                     webContainer.getLocationOnScreen(loc)
-                    val inside = ev.rawY >= loc[1] && ev.rawY <= loc[1] + webContainer.height
+                    val inPage = ev.rawY >= loc[1] && ev.rawY <= loc[1] + webContainer.height
                     val width = resources.displayMetrics.widthPixels
-                    if (inside && (ev.rawX <= edge || ev.rawX >= width - edge)) {
+                    val edge = 26 * density
+                    if (Settings.swipeNav && inPage && (ev.rawX <= edge || ev.rawX >= width - edge)) {
                         swipeActive = true
                         swipeFromLeft = ev.rawX <= edge
                         swipeX = ev.rawX
                         swipeY = ev.rawY
+                    } else if (urlRow.visibility == View.VISIBLE && !urlBar.hasFocus()) {
+                        urlRow.getLocationOnScreen(loc)
+                        val inBar = ev.rawY >= loc[1] && ev.rawY <= loc[1] + urlRow.height &&
+                            ev.rawX >= loc[0] && ev.rawX <= loc[0] + urlRow.width
+                        if (inBar) {
+                            barActive = true
+                            swipeX = ev.rawX
+                            swipeY = ev.rawY
+                        }
                     }
                 }
-                MotionEvent.ACTION_MOVE -> if (swipeActive && !swipeDone) {
+                MotionEvent.ACTION_MOVE -> {
                     val dx = ev.rawX - swipeX
                     val dy = ev.rawY - swipeY
-                    val good = if (swipeFromLeft) dx > 72 * density else -dx > 72 * density
-                    if (good && Math.abs(dy) < Math.abs(dx) * 0.6f) {
-                        swipeDone = true
-                        swipeActive = false
-                        val cancel = MotionEvent.obtain(ev)
-                        cancel.action = MotionEvent.ACTION_CANCEL
-                        super.dispatchTouchEvent(cancel)
-                        cancel.recycle()
-                        swipeNavigate(swipeFromLeft)
-                        return true
-                    } else if (Math.abs(dy) > 40 * density && Math.abs(dy) > Math.abs(dx)) {
-                        swipeActive = false
+                    if (swipeActive && !swipeDone) {
+                        val good = if (swipeFromLeft) dx > 72 * density else -dx > 72 * density
+                        if (good && Math.abs(dy) < Math.abs(dx) * 0.6f) {
+                            val action = Gestures.get(if (swipeFromLeft) GSlot.EDGE_LEFT else GSlot.EDGE_RIGHT)
+                            swipeActive = false
+                            if (action != GAction.NONE) return fireSwipe(ev, action)
+                        } else if (Math.abs(dy) > 40 * density && Math.abs(dy) > Math.abs(dx)) {
+                            swipeActive = false
+                        }
+                    } else if (barActive && !swipeDone) {
+                        val slot = when {
+                            Math.abs(dx) > 60 * density && Math.abs(dy) < Math.abs(dx) * 0.6f ->
+                                if (dx < 0) GSlot.BAR_LEFT else GSlot.BAR_RIGHT
+                            Math.abs(dy) > 44 * density && Math.abs(dx) < Math.abs(dy) * 0.6f ->
+                                if (dy < 0) GSlot.BAR_UP else GSlot.BAR_DOWN
+                            else -> null
+                        }
+                        if (slot != null) {
+                            val action = Gestures.get(slot)
+                            barActive = false
+                            // A gesture set to "Do nothing" leaves the bar behaving as usual
+                            if (action != GAction.NONE) return fireSwipe(ev, action)
+                        }
                     }
                 }
                 MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
                     swipeActive = false
+                    barActive = false
                     if (swipeDone) {
                         swipeDone = false
                         return true
@@ -1841,17 +1951,20 @@ class MainActivity : AppCompatActivity() {
         return super.dispatchTouchEvent(ev)
     }
 
-    private fun swipeNavigate(back: Boolean) {
-        val wv = currentTab?.webView ?: return
-        if (back) {
-            if (wv.canGoBack()) {
-                wv.goBack()
-                webContainer.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
-            }
-        } else if (wv.canGoForward()) {
-            wv.goForward()
+    /** Stops the page / bar from seeing the rest of this touch, then runs the action. */
+    private fun fireSwipe(ev: MotionEvent, action: GAction): Boolean {
+        swipeDone = true
+        swipeActive = false
+        barActive = false
+        val cancel = MotionEvent.obtain(ev)
+        cancel.action = MotionEvent.ACTION_CANCEL
+        super.dispatchTouchEvent(cancel)
+        cancel.recycle()
+        if (action != GAction.NONE) {
             webContainer.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
+            runGesture(action)
         }
+        return true
     }
 
     // ---------- File downloads from pages ----------
@@ -2166,7 +2279,7 @@ class MainActivity : AppCompatActivity() {
     private fun sectionHeader(text: String, onClick: (() -> Unit)?): TextView {
         val tv = TextView(this)
         tv.text = text
-        tv.setTextColor(color(R.color.vio_accent))
+        tv.setTextColor(color(R.attr.vioAccent))
         tv.textSize = 12f
         tv.typeface = android.graphics.Typeface.DEFAULT_BOLD
         tv.setPadding(dp(4), dp(10), dp(4), dp(8))
@@ -2181,7 +2294,7 @@ class MainActivity : AppCompatActivity() {
     private fun emptyNote(text: String): TextView {
         val tv = TextView(this)
         tv.text = text
-        tv.setTextColor(color(R.color.vio_subtext))
+        tv.setTextColor(color(R.attr.vioSubtext))
         tv.textSize = 14f
         tv.setPadding(0, dp(24), 0, dp(24))
         return tv
@@ -2191,7 +2304,7 @@ class MainActivity : AppCompatActivity() {
         for (i in chips.indices) {
             val on = i == tabFilter
             chips[i].setBackgroundResource(if (on) R.drawable.bg_chip_on else R.drawable.bg_chip)
-            chips[i].setTextColor(color(if (on) R.color.vio_surface else R.color.vio_text))
+            chips[i].setTextColor(color(if (on) R.attr.vioSurface else R.attr.vioText))
         }
 
         tabsList.removeAllViews()
@@ -2551,7 +2664,7 @@ class MainActivity : AppCompatActivity() {
         if (shown.isEmpty()) {
             val tv = TextView(this)
             tv.text = "Pages you visit will show up here"
-            tv.setTextColor(color(R.color.vio_subtext))
+            tv.setTextColor(color(R.attr.vioSubtext))
             tv.textSize = 13f
             tv.setPadding(0, dp(12), 0, dp(12))
             recentList.addView(tv)
@@ -2684,7 +2797,7 @@ class MainActivity : AppCompatActivity() {
         applyThumb(dcThumb, item.thumb)
 
         dcAction.alpha = 1f
-        dcStatus.setTextColor(color(R.color.vio_accent))
+        dcStatus.setTextColor(color(R.attr.vioAccent))
         when (item.state) {
             VideoItem.State.IDLE -> {
                 dcProgress.visibility = View.GONE
@@ -2905,7 +3018,7 @@ class MainActivity : AppCompatActivity() {
         play.visibility = if (!item.generic && item.problem == null && item.state != VideoItem.State.DONE) View.VISIBLE else View.GONE
         play.setOnClickListener { playItem(item) }
 
-        status.setTextColor(color(R.color.vio_accent))
+        status.setTextColor(color(R.attr.vioAccent))
         action.visibility = View.GONE
         cancel.visibility = View.GONE
         done.visibility = View.GONE
@@ -2977,7 +3090,7 @@ class MainActivity : AppCompatActivity() {
             view.scaleType = ImageView.ScaleType.CENTER_INSIDE
             view.setPadding(p, p, p, p)
             view.setImageResource(ph)
-            view.setColorFilter(color(R.color.vio_subtext))
+            view.setColorFilter(color(R.attr.vioSubtext))
             view.tag = "ph$ph"
         }
     }
@@ -3085,13 +3198,13 @@ class MainActivity : AppCompatActivity() {
         lblDownload.text = "Download\n$dlText"
 
         // URL bar tools icon: red while recording
-        btnTools.setColorFilter(color(if (rec) R.color.vio_red else R.color.vio_accent))
+        btnTools.setColorFilter(color(if (rec) R.color.vio_red else R.attr.vioAccent))
         tabCount.text = "${tabs.size}"
         val shieldHost = currentTab?.let { hostOf(it.url) } ?: ""
         val shieldOn = Settings.blockAds && !Settings.shieldsOffFor(shieldHost)
-        btnShield.setColorFilter(color(if (shieldOn) R.color.vio_accent else R.color.vio_subtext))
+        btnShield.setColorFilter(color(if (shieldOn) R.attr.vioAccent else R.attr.vioSubtext))
         val plainHttp = currentTab?.url?.startsWith("http://") == true
-        btnSite.setColorFilter(color(if (plainHttp) R.color.vio_red else R.color.vio_subtext))
+        btnSite.setColorFilter(color(if (plainHttp) R.color.vio_red else R.attr.vioSubtext))
 
         // Recording just started: tuck the card away so it isn't in the video
         if (rec && !lastRec && detectCard.visibility == View.VISIBLE) scheduleHide(2500)
@@ -3130,9 +3243,9 @@ class MainActivity : AppCompatActivity() {
 
     private fun applyDlTab() {
         dlTabFound.setBackgroundResource(if (!showSaved) R.drawable.bg_chip_on else R.drawable.bg_chip)
-        dlTabFound.setTextColor(color(if (!showSaved) R.color.vio_surface else R.color.vio_text))
+        dlTabFound.setTextColor(color(if (!showSaved) R.attr.vioSurface else R.attr.vioText))
         dlTabSaved.setBackgroundResource(if (showSaved) R.drawable.bg_chip_on else R.drawable.bg_chip)
-        dlTabSaved.setTextColor(color(if (showSaved) R.color.vio_surface else R.color.vio_text))
+        dlTabSaved.setTextColor(color(if (showSaved) R.attr.vioSurface else R.attr.vioText))
         dlFoundHeader.visibility = if (showSaved) View.GONE else View.VISIBLE
         dlFoundFrame.visibility = if (showSaved) View.GONE else View.VISIBLE
         libPanel.visibility = if (showSaved) View.VISIBLE else View.GONE
@@ -3245,7 +3358,7 @@ class MainActivity : AppCompatActivity() {
             val tv = libChips[i]
             tv.text = if (n > 0) v.label + " " + n else v.label
             tv.setBackgroundResource(if (on) R.drawable.bg_chip_on else R.drawable.bg_chip)
-            tv.setTextColor(color(if (on) R.color.vio_surface else R.color.vio_text))
+            tv.setTextColor(color(if (on) R.attr.vioSurface else R.attr.vioText))
         }
     }
 
@@ -3277,14 +3390,15 @@ class MainActivity : AppCompatActivity() {
             .show()
     }
 
-    private val catColors = intArrayOf(
-        0xFF4B42F0.toInt(), // video
-        0xFF16A34A.toInt(), // audio
-        0xFFF59E0B.toInt(), // docs
-        0xFFEC4899.toInt(), // images
-        0xFF8A8A93.toInt(), // other
-        0xFF111114.toInt()  // vault
-    )
+    private val catColors: IntArray
+        get() = intArrayOf(
+            color(R.attr.vioAccent), // video
+            0xFF16A34A.toInt(), // audio
+            0xFFF59E0B.toInt(), // docs
+            0xFFEC4899.toInt(), // images
+            0xFF8A8A93.toInt(), // other
+            color(R.attr.vioDark) // vault
+        )
 
     private fun categorySizes(): LongArray {
         val sums = LongArray(6)
@@ -3796,7 +3910,7 @@ class MainActivity : AppCompatActivity() {
             card.gravity = Gravity.CENTER
             card.setLineSpacing(0f, 1.2f)
             card.text = "Vault is locked\nTap to unlock with fingerprint, face or phone PIN"
-            card.setTextColor(color(R.color.vio_text))
+            card.setTextColor(color(R.attr.vioText))
             card.textSize = 14f
             card.setOnClickListener { requireVault { bindLibrary() } }
             libList.addView(card)
@@ -4004,6 +4118,784 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    // ---------- Appearance: re-skin without closing tabs ----------
+
+    /** Draws the whole screen again with the current theme, keeping every open tab alive. */
+    private fun rebuildUi() {
+        if (customView != null) return
+        setBrowseFullscreen(false)
+        hideSuggestions()
+        uiHandler.removeCallbacks(hideCardRunnable)
+        VioTheme.apply(this)
+        appliedDark = VioTheme.isDark(this)
+
+        // Take the pages out of the old layout so they survive
+        for (t in tabs) {
+            val h = t.holder
+            if (h != null) (h.parent as? ViewGroup)?.removeView(h)
+        }
+        lockView = null
+        libChips.clear()
+        rowViews.clear()
+        shownIds = emptyList()
+        sugAnchor = null
+
+        setContentView(R.layout.activity_main)
+        bindViews()
+        setupClicks()
+        VioTheme.applyBars(this)
+
+        for (t in tabs) {
+            val h = t.holder ?: continue
+            h.visibility = if (t === currentTab) View.VISIBLE else View.GONE
+            webContainer.addView(
+                h,
+                0,
+                FrameLayout.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT,
+                    ViewGroup.LayoutParams.MATCH_PARENT
+                )
+            )
+        }
+        applyToolbarLayout()
+        applyToolbarButtons()
+        urlBar.setText(currentTab?.url ?: "")
+        showScreen(screen, navIndex)
+    }
+
+    override fun onConfigurationChanged(newConfig: Configuration) {
+        super.onConfigurationChanged(newConfig)
+        VioTheme.applyFontScale(this)
+        if (Settings.themeMode == 0 && VioTheme.isDark(this) != appliedDark) rebuildUi()
+    }
+
+    private fun showThemeDialog() {
+        AlertDialog.Builder(this)
+            .setTitle("Theme")
+            .setSingleChoiceItems(VioTheme.THEME_NAMES, Settings.themeMode) { d, which ->
+                d.dismiss()
+                if (which != Settings.themeMode) {
+                    Settings.themeMode = which
+                    rebuildUi()
+                }
+            }
+            .setNegativeButton("Cancel", null)
+            .show()
+    }
+
+    private fun showAccentDialog() {
+        val dark = VioTheme.isDark(this)
+        val box = LinearLayout(this)
+        box.orientation = LinearLayout.VERTICAL
+        box.setPadding(dp(12), dp(8), dp(12), dp(4))
+        var dialog: AlertDialog? = null
+        var row: LinearLayout? = null
+        for (i in VioTheme.ACCENT_NAMES.indices) {
+            if (i % 5 == 0) {
+                val r = LinearLayout(this)
+                r.orientation = LinearLayout.HORIZONTAL
+                r.gravity = Gravity.CENTER
+                box.addView(
+                    r,
+                    LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT)
+                )
+                row = r
+            }
+            val cell = LinearLayout(this)
+            cell.orientation = LinearLayout.VERTICAL
+            cell.gravity = Gravity.CENTER_HORIZONTAL
+            cell.setPadding(dp(2), dp(8), dp(2), dp(8))
+
+            val sw = TextView(this)
+            sw.gravity = Gravity.CENTER
+            sw.textSize = 20f
+            sw.text = if (i == Settings.accent) "✓" else ""
+            sw.setTextColor(if (dark) 0xFF0B0B10.toInt() else Color.WHITE)
+            val g = GradientDrawable()
+            g.shape = GradientDrawable.OVAL
+            g.setColor(if (dark) VioTheme.ACCENT_DARK[i] else VioTheme.ACCENT_LIGHT[i])
+            sw.background = g
+            cell.addView(sw, LinearLayout.LayoutParams(dp(46), dp(46)))
+
+            val name = TextView(this)
+            name.text = VioTheme.ACCENT_NAMES[i]
+            name.textSize = 11f
+            name.gravity = Gravity.CENTER
+            name.setTextColor(color(R.attr.vioSubtext))
+            val nlp = LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT)
+            nlp.topMargin = dp(4)
+            cell.addView(name, nlp)
+
+            cell.setOnClickListener {
+                dialog?.dismiss()
+                if (Settings.accent != i) {
+                    Settings.accent = i
+                    rebuildUi()
+                }
+            }
+            row?.addView(cell, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+        }
+        dialog = AlertDialog.Builder(this)
+            .setTitle("Accent colour")
+            .setView(box)
+            .setNegativeButton("Close", null)
+            .show()
+    }
+
+    // ---------- Wallpaper ----------
+
+    private fun wallpaperOn(): Boolean {
+        if (screen != Screen.HOME || homePrivate) return false
+        return when (Settings.wallpaperKind) {
+            1 -> true
+            2 -> Wallpaper.hasPhoto(this)
+            else -> false
+        }
+    }
+
+    private fun wallpaperName(): String = when (Settings.wallpaperKind) {
+        1 -> Wallpaper.presets[Settings.wallpaperPreset.coerceIn(0, Wallpaper.presets.size - 1)].name
+        2 -> if (Wallpaper.hasPhoto(this)) "Your photo" else "None"
+        else -> "None"
+    }
+
+    private fun applyWallpaper() {
+        val on = wallpaperOn()
+        var d: android.graphics.drawable.Drawable? = null
+        if (on) {
+            d = if (Settings.wallpaperKind == 1) {
+                Wallpaper.gradient(Wallpaper.presets[Settings.wallpaperPreset.coerceIn(0, Wallpaper.presets.size - 1)])
+            } else {
+                val b = Wallpaper.photo(this)
+                if (b != null) android.graphics.drawable.BitmapDrawable(resources, b) else null
+            }
+        }
+        val show = on && d != null
+        wallpaperView.visibility = if (show) View.VISIBLE else View.GONE
+        wallpaperScrim.visibility = if (show) View.VISIBLE else View.GONE
+        if (show) {
+            wallpaperView.setImageDrawable(d)
+            wallpaperScrim.setBackgroundColor(Color.argb(Settings.wallpaperDim * 255 / 100, 0, 0, 0))
+        }
+        // Text that sits straight on the picture
+        val main = if (show) Color.WHITE else color(R.attr.vioText)
+        val sub = if (show) 0xCCFFFFFF.toInt() else color(R.attr.vioSubtext)
+        homeBrandText.setTextColor(main)
+        shortcutsHeader.setTextColor(main)
+        recentHeader.setTextColor(main)
+        homeSubtitle.setTextColor(sub)
+        if (!homePrivate) greeting.setTextColor(main)
+        seeAll.setTextColor(if (show) Color.WHITE else color(R.attr.vioAccent))
+    }
+
+    private fun showWallpaperDialog() {
+        val box = LinearLayout(this)
+        box.orientation = LinearLayout.VERTICAL
+        box.setPadding(dp(12), dp(8), dp(12), dp(4))
+        var dialog: AlertDialog? = null
+        var row: LinearLayout? = null
+        for ((i, p) in Wallpaper.presets.withIndex()) {
+            if (i % 4 == 0) {
+                val r = LinearLayout(this)
+                r.orientation = LinearLayout.HORIZONTAL
+                box.addView(
+                    r,
+                    LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT)
+                )
+                row = r
+            }
+            val cell = LinearLayout(this)
+            cell.orientation = LinearLayout.VERTICAL
+            cell.gravity = Gravity.CENTER_HORIZONTAL
+            cell.setPadding(dp(3), dp(6), dp(3), dp(6))
+            val sw = TextView(this)
+            sw.gravity = Gravity.CENTER
+            sw.textSize = 20f
+            sw.setTextColor(Color.WHITE)
+            sw.text = if (Settings.wallpaperKind == 1 && Settings.wallpaperPreset == i) "✓" else ""
+            val g = GradientDrawable(GradientDrawable.Orientation.TL_BR, intArrayOf(p.c1, p.c2))
+            g.cornerRadius = dp(10).toFloat()
+            sw.background = g
+            cell.addView(sw, LinearLayout.LayoutParams(dp(58), dp(78)))
+            val name = TextView(this)
+            name.text = p.name
+            name.textSize = 11f
+            name.setTextColor(color(R.attr.vioSubtext))
+            val nlp = LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT)
+            nlp.topMargin = dp(4)
+            cell.addView(name, nlp)
+            cell.setOnClickListener {
+                Settings.wallpaperKind = 1
+                Settings.wallpaperPreset = i
+                dialog?.dismiss()
+                bindSettings()
+                toast("Wallpaper set. See it on the start page")
+            }
+            row?.addView(cell, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+        }
+
+        fun button(text: String, onClick: (TextView) -> Unit): TextView {
+            val tv = TextView(this)
+            tv.text = text
+            tv.gravity = Gravity.CENTER
+            tv.textSize = 14f
+            tv.setTextColor(color(R.attr.vioAccent))
+            tv.setBackgroundResource(R.drawable.bg_btn_light)
+            tv.isClickable = true
+            tv.isFocusable = true
+            tv.setOnClickListener { onClick(tv) }
+            val lp = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(44))
+            lp.topMargin = dp(8)
+            box.addView(tv, lp)
+            return tv
+        }
+
+        button("Choose a photo") {
+            dialog?.dismiss()
+            suppressLock = true
+            try {
+                wallpaperPicker.launch("image/*")
+            } catch (_: Exception) {
+                suppressLock = false
+                toast("No gallery app found")
+            }
+        }
+        val dims = intArrayOf(0, 20, 30, 45, 60)
+        button("Darken the picture:  " + Settings.wallpaperDim + "%") { tv ->
+            val i = dims.indexOf(Settings.wallpaperDim)
+            Settings.wallpaperDim = dims[(i + 1) % dims.size]
+            tv.text = "Darken the picture:  " + Settings.wallpaperDim + "%"
+        }
+        button("No wallpaper") {
+            Settings.wallpaperKind = 0
+            Wallpaper.deletePhoto(this)
+            dialog?.dismiss()
+            bindSettings()
+        }
+
+        val scroll = ScrollView(this)
+        scroll.addView(box)
+        dialog = AlertDialog.Builder(this)
+            .setTitle("Wallpaper")
+            .setView(scroll)
+            .setNegativeButton("Close") { _, _ -> bindSettings() }
+            .show()
+    }
+
+    // ---------- Start page layout ----------
+
+    private val homeKeys = listOf("greeting", "search", "tiles", "shortcuts", "recent")
+
+    private fun homeOrderList(): MutableList<String> {
+        val order = ArrayList<String>()
+        for (k in Settings.homeOrder.split(",")) if (k in homeKeys && k !in order) order.add(k)
+        for (k in homeKeys) if (k !in order) order.add(k)
+        return order
+    }
+
+    private fun homeVisible(k: String): Boolean = when (k) {
+        "greeting" -> Settings.showGreeting
+        "tiles" -> Settings.showTiles
+        "shortcuts" -> Settings.showShortcuts
+        "recent" -> Settings.showRecent
+        else -> true
+    }
+
+    private fun setHomeVisible(k: String, v: Boolean) {
+        when (k) {
+            "greeting" -> Settings.showGreeting = v
+            "tiles" -> Settings.showTiles = v
+            "shortcuts" -> Settings.showShortcuts = v
+            "recent" -> Settings.showRecent = v
+        }
+    }
+
+    private fun homeLabel(k: String): String = when (k) {
+        "greeting" -> "Greeting"
+        "search" -> "Search bar"
+        "tiles" -> "Action tiles"
+        "shortcuts" -> "Shortcuts"
+        else -> "Recent pages"
+    }
+
+    private fun homeLayoutName(): String {
+        val order = homeOrderList().joinToString(",")
+        val vis = homeKeys.joinToString("") { if (homeVisible(it)) "1" else "0" }
+        return when {
+            order == "greeting,search,tiles,shortcuts,recent" && vis == "11111" && Settings.shortcutCols == 4 -> "Classic"
+            order == "greeting,search,shortcuts,tiles,recent" && vis == "11010" -> "Minimal"
+            order == "search,shortcuts,tiles,recent,greeting" && vis == "11111" -> "Quick access"
+            else -> "Custom"
+        }
+    }
+
+    private fun applyHomeLayout() {
+        val parent = homeContent
+        val order = homeOrderList()
+        val groups = mapOf(
+            "greeting" to listOf<View>(greeting, homeSubtitle),
+            "search" to listOf<View>(homeSearchRow),
+            "tiles" to listOf<View>(homeTiles),
+            "shortcuts" to listOf<View>(shortcutsSection),
+            "recent" to listOf<View>(recentSection)
+        )
+        val want = ArrayList<View>()
+        for (k in order) want.addAll(groups[k] ?: emptyList())
+        val have = ArrayList<View>()
+        for (i in 1 until parent.childCount) have.add(parent.getChildAt(i))
+        if (have != want) {
+            for (v in want) parent.removeView(v)
+            for (v in want) parent.addView(v)
+        }
+        val showGreet = Settings.showGreeting || homePrivate
+        greeting.visibility = if (showGreet) View.VISIBLE else View.GONE
+        homeSubtitle.visibility = if (showGreet) View.VISIBLE else View.GONE
+        homeTiles.visibility = if (Settings.showTiles) View.VISIBLE else View.GONE
+    }
+
+    private fun showHomeLayoutDialog() {
+        val scroll = ScrollView(this)
+        val box = LinearLayout(this)
+        box.orientation = LinearLayout.VERTICAL
+        box.setPadding(dp(16), dp(8), dp(16), dp(8))
+        scroll.addView(box)
+
+        fun changed(fill: () -> Unit) {
+            bindSettings()
+            fill()
+        }
+
+        fun fill() {
+            box.removeAllViews()
+
+            val presets = LinearLayout(this)
+            presets.orientation = LinearLayout.HORIZONTAL
+            fun preset(name: String, order: String, greet: Boolean, tiles: Boolean, shortcuts: Boolean, recent: Boolean) {
+                val tv = TextView(this)
+                tv.text = name
+                tv.gravity = Gravity.CENTER
+                tv.textSize = 13f
+                val on = homeLayoutName() == name
+                tv.setBackgroundResource(if (on) R.drawable.bg_chip_on else R.drawable.bg_chip)
+                tv.setTextColor(color(if (on) R.attr.vioSurface else R.attr.vioText))
+                tv.isClickable = true
+                tv.isFocusable = true
+                tv.setOnClickListener {
+                    Settings.homeOrder = order
+                    Settings.showGreeting = greet
+                    Settings.showTiles = tiles
+                    Settings.showShortcuts = shortcuts
+                    Settings.showRecent = recent
+                    Settings.shortcutCols = 4
+                    changed { fill() }
+                }
+                val lp = LinearLayout.LayoutParams(0, dp(36), 1f)
+                lp.marginEnd = dp(6)
+                presets.addView(tv, lp)
+            }
+            preset("Classic", "greeting,search,tiles,shortcuts,recent", true, true, true, true)
+            preset("Minimal", "greeting,search,shortcuts,tiles,recent", true, false, true, false)
+            preset("Quick access", "search,shortcuts,tiles,recent,greeting", true, true, true, true)
+            box.addView(presets)
+
+            val order = homeOrderList()
+            for ((i, k) in order.withIndex()) {
+                val row = LinearLayout(this)
+                row.orientation = LinearLayout.HORIZONTAL
+                row.gravity = Gravity.CENTER_VERTICAL
+
+                val name = TextView(this)
+                name.text = homeLabel(k)
+                name.textSize = 15f
+                name.setTextColor(color(if (homeVisible(k)) R.attr.vioText else R.attr.vioSubtext))
+                row.addView(name, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+
+                fun arrow(text: String, delta: Int, enabled: Boolean) {
+                    val a = TextView(this)
+                    a.text = text
+                    a.gravity = Gravity.CENTER
+                    a.textSize = 16f
+                    a.setTextColor(color(if (enabled) R.attr.vioAccent else R.attr.vioBorder))
+                    if (enabled) {
+                        a.isClickable = true
+                        a.isFocusable = true
+                        a.setOnClickListener {
+                            val list = homeOrderList()
+                            val idx = list.indexOf(k)
+                            val to = idx + delta
+                            if (idx >= 0 && to in list.indices) {
+                                list.removeAt(idx)
+                                list.add(to, k)
+                                Settings.homeOrder = list.joinToString(",")
+                                changed { fill() }
+                            }
+                        }
+                    }
+                    row.addView(a, LinearLayout.LayoutParams(dp(40), dp(44)))
+                }
+                arrow("▲", -1, i > 0)
+                arrow("▼", 1, i < order.size - 1)
+
+                if (k == "search") {
+                    row.addView(View(this), LinearLayout.LayoutParams(dp(48), dp(1)))
+                } else {
+                    val sw = SwitchCompat(this)
+                    sw.isChecked = homeVisible(k)
+                    sw.setOnCheckedChangeListener { _, c ->
+                        setHomeVisible(k, c)
+                        changed { fill() }
+                    }
+                    row.addView(sw, LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, dp(44)))
+                }
+                box.addView(
+                    row,
+                    LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT)
+                )
+            }
+
+            val cols = TextView(this)
+            cols.text = "Shortcuts per row:  " + Settings.shortcutCols + "   (tap to change)"
+            cols.textSize = 14f
+            cols.setTextColor(color(R.attr.vioAccent))
+            cols.setPadding(0, dp(14), 0, dp(6))
+            cols.isClickable = true
+            cols.setOnClickListener {
+                Settings.shortcutCols = if (Settings.shortcutCols >= 5) 3 else Settings.shortcutCols + 1
+                changed { fill() }
+            }
+            box.addView(cols)
+        }
+        fill()
+        AlertDialog.Builder(this)
+            .setTitle("Home page layout")
+            .setView(scroll)
+            .setPositiveButton("Done") { _, _ -> bindSettings() }
+            .show()
+    }
+
+    // ---------- Toolbar ----------
+
+    /** Address bar at the top or the bottom of the page. */
+    private fun applyToolbarLayout() {
+        val parent = browseView as LinearLayout
+        parent.removeView(urlRow)
+        parent.removeView(loadingBar)
+        parent.removeView(webContainer)
+        val lp = urlRow.layoutParams as LinearLayout.LayoutParams
+        if (Settings.addressBottom) {
+            lp.topMargin = dp(6)
+            lp.bottomMargin = dp(8)
+            parent.addView(webContainer)
+            parent.addView(loadingBar)
+            parent.addView(urlRow)
+        } else {
+            lp.topMargin = dp(8)
+            lp.bottomMargin = 0
+            parent.addView(urlRow)
+            parent.addView(loadingBar)
+            parent.addView(webContainer)
+        }
+        urlRow.layoutParams = lp
+    }
+
+    private fun applyToolbarButtons() {
+        btnSite.visibility = if (Settings.hideBtnSite) View.GONE else View.VISIBLE
+        btnShield.visibility = if (Settings.hideBtnShield) View.GONE else View.VISIBLE
+        btnTools.visibility = if (Settings.hideBtnTools) View.GONE else View.VISIBLE
+    }
+
+    /** The Home / Tabs / More bar: hidden in full screen, and optionally while a page is open. */
+    private fun updateBars() {
+        val hide = browseFs || (Settings.hideBottomBar && screen == Screen.BROWSE)
+        bottomNav.visibility = if (hide) View.GONE else View.VISIBLE
+        navDivider.visibility = if (hide) View.GONE else View.VISIBLE
+    }
+
+    private fun toolbarSummary(): String {
+        val a = if (Settings.addressBottom) "Address bar at the bottom" else "Address bar on top"
+        return if (Settings.hideBottomBar) "$a  •  bottom bar hidden on pages" else a
+    }
+
+    private fun showToolbarDialog() {
+        val labels = arrayOf(
+            "Address bar:   " + (if (Settings.addressBottom) "Bottom" else "Top"),
+            "Bottom bar:   " + (if (Settings.hideBottomBar) "Hidden while browsing" else "Always shown"),
+            "Buttons in the address bar…"
+        )
+        AlertDialog.Builder(this)
+            .setTitle("Toolbar")
+            .setItems(labels) { _, i ->
+                when (i) {
+                    0 -> {
+                        Settings.addressBottom = !Settings.addressBottom
+                        applyToolbarLayout()
+                        bindSettings()
+                        showToolbarDialog()
+                    }
+                    1 -> {
+                        Settings.hideBottomBar = !Settings.hideBottomBar
+                        updateBars()
+                        bindSettings()
+                        showToolbarDialog()
+                    }
+                    else -> showToolbarButtons()
+                }
+            }
+            .setNegativeButton("Done", null)
+            .show()
+    }
+
+    private fun showToolbarButtons() {
+        val names = arrayOf("Site info (left icon)", "Shields", "Video and download tools")
+        val checked = booleanArrayOf(!Settings.hideBtnSite, !Settings.hideBtnShield, !Settings.hideBtnTools)
+        AlertDialog.Builder(this)
+            .setTitle("Buttons in the address bar")
+            .setMultiChoiceItems(names, checked) { _, i, on ->
+                when (i) {
+                    0 -> Settings.hideBtnSite = !on
+                    1 -> Settings.hideBtnShield = !on
+                    else -> Settings.hideBtnTools = !on
+                }
+                applyToolbarButtons()
+            }
+            .setPositiveButton("Done") { _, _ ->
+                bindSettings()
+                showToolbarDialog()
+            }
+            .show()
+    }
+
+    // ---------- Gestures ----------
+
+    private fun showGesturesDialog() {
+        val slots = GSlot.values()
+        val labels = Array(slots.size) { slots[it].label + "\n" + Gestures.get(slots[it]).label }
+        AlertDialog.Builder(this)
+            .setTitle("Gestures")
+            .setItems(labels) { _, i -> pickGestureAction(slots[i]) }
+            .setNeutralButton("Reset all") { _, _ ->
+                Gestures.resetAll()
+                bindSettings()
+                showGesturesDialog()
+            }
+            .setNegativeButton("Close", null)
+            .show()
+    }
+
+    private fun pickGestureAction(slot: GSlot) {
+        val acts = GAction.values()
+        AlertDialog.Builder(this)
+            .setTitle(slot.label)
+            .setSingleChoiceItems(Array(acts.size) { acts[it].label }, Gestures.get(slot).ordinal) { d, which ->
+                Gestures.set(slot, acts[which])
+                d.dismiss()
+                bindSettings()
+                showGesturesDialog()
+            }
+            .setNegativeButton("Back") { _, _ -> showGesturesDialog() }
+            .show()
+    }
+
+    private fun cycleTab(delta: Int) {
+        val cur = currentTab ?: return
+        val pool = tabs.filter { it.isPrivate == cur.isPrivate }
+        if (pool.size < 2) {
+            toast("No other tabs")
+            return
+        }
+        val idx = pool.indexOf(cur)
+        val next = pool[((idx + delta) % pool.size + pool.size) % pool.size]
+        openTabNow(next)
+    }
+
+    private fun runGesture(a: GAction) {
+        if (a == GAction.NONE) return
+        val tab = currentTab
+        val wv = tab?.webView
+        when (a) {
+            GAction.BACK -> if (wv != null && wv.canGoBack()) wv.goBack()
+            GAction.FORWARD -> if (wv != null && wv.canGoForward()) wv.goForward()
+            GAction.RELOAD -> wv?.reload()
+            GAction.NEXT_TAB -> cycleTab(1)
+            GAction.PREV_TAB -> cycleTab(-1)
+            GAction.NEW_TAB -> newTab(tab?.isPrivate == true)
+            GAction.CLOSE_TAB -> if (tab != null) {
+                closeTab(tab)
+                val next = currentTab
+                if (next != null) openTabNow(next) else goHome()
+                updateUi()
+            }
+            GAction.TOP -> wv?.pageUp(true)
+            GAction.BOTTOM -> wv?.pageDown(true)
+            GAction.TABS -> showScreen(Screen.TABS, 1)
+            GAction.HOME -> goHome()
+            GAction.DESKTOP -> if (tab != null && tab.url.isNotEmpty()) toggleDesktop(tab)
+            GAction.FULLSCREEN -> if (screen == Screen.BROWSE) setBrowseFullscreen(!browseFs)
+            GAction.SCAN -> startScan()
+            GAction.NONE -> {}
+        }
+    }
+
+    // ---------- Text size and fonts ----------
+
+    private fun applyPageText(st: WebSettings) {
+        try {
+            st.textZoom = Settings.pageTextZoom
+            st.standardFontFamily = when (Settings.pageFont) {
+                1 -> "serif"
+                2 -> "monospace"
+                else -> "sans-serif"
+            }
+        } catch (_: Exception) {
+        }
+    }
+
+    private fun applyPageText() {
+        for (t in tabs) applyPageText(t.webView.settings)
+    }
+
+    private fun appTextName(): String {
+        val i = VioTheme.TEXT_SCALES.indexOf(Settings.uiTextScale)
+        return if (i >= 0) VioTheme.TEXT_SCALE_NAMES[i] else Settings.uiTextScale.toString() + "%"
+    }
+
+    private fun pageFontName(): String = when (Settings.pageFont) {
+        1 -> "Serif"
+        2 -> "Monospace"
+        else -> "Default"
+    }
+
+    private fun showTextSizeDialog() {
+        AlertDialog.Builder(this)
+            .setTitle("Text size")
+            .setItems(arrayOf("App text size…", "Page text size…")) { _, i ->
+                if (i == 0) pickAppTextSize() else pickPageTextSize()
+            }
+            .setNegativeButton("Close", null)
+            .show()
+    }
+
+    private fun pickAppTextSize() {
+        var cur = VioTheme.TEXT_SCALES.indexOf(Settings.uiTextScale)
+        if (cur < 0) cur = 1
+        AlertDialog.Builder(this)
+            .setTitle("App text size")
+            .setSingleChoiceItems(VioTheme.TEXT_SCALE_NAMES, cur) { d, which ->
+                d.dismiss()
+                if (VioTheme.TEXT_SCALES[which] != Settings.uiTextScale) {
+                    Settings.uiTextScale = VioTheme.TEXT_SCALES[which]
+                    rebuildUi()
+                }
+            }
+            .setNegativeButton("Cancel", null)
+            .show()
+    }
+
+    private fun pickPageTextSize() {
+        val box = LinearLayout(this)
+        box.orientation = LinearLayout.VERTICAL
+        box.setPadding(dp(20), dp(12), dp(20), dp(4))
+
+        val label = TextView(this)
+        label.textSize = 15f
+        label.setTextColor(color(R.attr.vioText))
+        box.addView(label)
+
+        val seek = SeekBar(this)
+        seek.max = 20 // 50% .. 250%, steps of 10
+        seek.progress = (Settings.pageTextZoom - 50) / 10
+        box.addView(
+            seek,
+            LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT)
+        )
+
+        val sample = TextView(this)
+        sample.text = "The quick brown fox jumps over the lazy dog."
+        sample.setTextColor(color(R.attr.vioSubtext))
+        val slp = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT)
+        slp.topMargin = dp(10)
+        box.addView(sample, slp)
+
+        fun show(zoom: Int) {
+            label.text = "Page text:  $zoom%"
+            sample.setTextSize(TypedValue.COMPLEX_UNIT_SP, 14f * zoom / 100f)
+        }
+        show(Settings.pageTextZoom)
+        seek.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
+            override fun onProgressChanged(sb: SeekBar?, progress: Int, fromUser: Boolean) {
+                val zoom = 50 + progress * 10
+                Settings.pageTextZoom = zoom
+                show(zoom)
+                applyPageText()
+            }
+
+            override fun onStartTrackingTouch(sb: SeekBar?) {}
+            override fun onStopTrackingTouch(sb: SeekBar?) {}
+        })
+        AlertDialog.Builder(this)
+            .setTitle("Page text size")
+            .setView(box)
+            .setPositiveButton("Done") { _, _ -> bindSettings() }
+            .setNeutralButton("Reset") { _, _ ->
+                Settings.pageTextZoom = 100
+                applyPageText()
+                bindSettings()
+            }
+            .show()
+    }
+
+    private fun showFontsDialog() {
+        AlertDialog.Builder(this)
+            .setTitle("Fonts")
+            .setItems(arrayOf("App font…", "Page font…  (pages that pick their own font keep it)")) { _, i ->
+                if (i == 0) pickAppFont() else pickPageFont()
+            }
+            .setNegativeButton("Close", null)
+            .show()
+    }
+
+    private fun pickAppFont() {
+        AlertDialog.Builder(this)
+            .setTitle("App font")
+            .setSingleChoiceItems(VioTheme.FONT_NAMES, Settings.uiFont) { d, which ->
+                d.dismiss()
+                if (which != Settings.uiFont) {
+                    Settings.uiFont = which
+                    rebuildUi()
+                }
+            }
+            .setNegativeButton("Cancel", null)
+            .show()
+    }
+
+    private fun pickPageFont() {
+        AlertDialog.Builder(this)
+            .setTitle("Page font")
+            .setSingleChoiceItems(arrayOf("Default", "Serif", "Monospace"), Settings.pageFont) { d, which ->
+                Settings.pageFont = which
+                applyPageText()
+                d.dismiss()
+                bindSettings()
+            }
+            .setNegativeButton("Cancel", null)
+            .show()
+    }
+
+    /** Fills the little grey lines under each Appearance row in Settings. */
+    private fun bindAppearanceRows() {
+        findViewById<TextView>(R.id.rowThemeSub).text = VioTheme.THEME_NAMES[Settings.themeMode]
+        findViewById<TextView>(R.id.rowAccentSub).text = VioTheme.ACCENT_NAMES[Settings.accent]
+        findViewById<TextView>(R.id.rowWallpaperSub).text = wallpaperName()
+        findViewById<TextView>(R.id.rowHomeLayoutSub).text = homeLayoutName()
+        findViewById<TextView>(R.id.rowToolbarSub).text = toolbarSummary()
+        findViewById<TextView>(R.id.rowGesturesSub).text =
+            "Edge swipes, address bar swipes, tab button"
+        findViewById<TextView>(R.id.rowTextSizeSub).text =
+            "App: " + appTextName() + "  •  Pages: " + Settings.pageTextZoom + "%"
+        findViewById<TextView>(R.id.rowFontsSub).text =
+            "App: " + VioTheme.FONT_NAMES[Settings.uiFont] + "  •  Pages: " + pageFontName()
+    }
+
     // ---------- Settings screen ----------
 
     private fun bindSettings() {
@@ -4044,6 +4936,7 @@ class MainActivity : AppCompatActivity() {
             if (savedSites == 0) "Camera, microphone and location, site by site"
             else "$savedSites saved site" + (if (savedSites == 1) "" else "s") + "  •  tap to manage"
 
+        bindAppearanceRows()
         swAds.isChecked = Settings.blockAds
         swHttps.isChecked = Settings.httpsUpgrade
         swCookies.isChecked = Settings.blockThirdPartyCookies
@@ -4182,7 +5075,11 @@ class MainActivity : AppCompatActivity() {
         Toast.makeText(this, msg, Toast.LENGTH_SHORT).show()
     }
 
-    private fun color(id: Int): Int = ContextCompat.getColor(this, id)
+    /** A colour from the theme (pass R.attr.vioText ...) or a fixed colour resource. */
+    private fun color(id: Int): Int {
+        if (resources.getResourceTypeName(id) == "attr") return VioTheme.attrColor(this, id)
+        return ContextCompat.getColor(this, id)
+    }
 
     private fun dp(value: Int): Int =
         (value * resources.displayMetrics.density).toInt()

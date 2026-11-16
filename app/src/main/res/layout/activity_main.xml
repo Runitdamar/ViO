@@ -2,13 +2,27 @@
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="@color/vio_bg"
+    android:background="?attr/vioBg"
     android:orientation="vertical">
 
     <FrameLayout
         android:layout_width="match_parent"
         android:layout_height="0dp"
         android:layout_weight="1">
+
+        <!-- Wallpaper behind the start page -->
+        <ImageView
+            android:id="@+id/wallpaperView"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:scaleType="centerCrop"
+            android:visibility="gone" />
+
+        <View
+            android:id="@+id/wallpaperScrim"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:visibility="gone" />
 
         <!-- ================= HOME ================= -->
         <ScrollView
@@ -19,6 +33,7 @@
             android:scrollbars="none">
 
             <LinearLayout
+                android:id="@+id/homeContent"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:orientation="vertical"
@@ -28,6 +43,7 @@
                 android:paddingBottom="24dp">
 
                 <LinearLayout
+                    android:id="@+id/homeBrand"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:gravity="center_vertical"
@@ -41,12 +57,13 @@
                         android:src="@drawable/ic_logo" />
 
                     <TextView
+                        android:id="@+id/homeBrandText"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
                         android:layout_marginStart="10dp"
                         android:fontFamily="serif"
                         android:text="Vio"
-                        android:textColor="@color/vio_text"
+                        android:textColor="?attr/vioText"
                         android:textSize="26sp" />
                 </LinearLayout>
 
@@ -58,7 +75,7 @@
                     android:fontFamily="serif"
                     android:lineSpacingMultiplier="0.9"
                     android:text="Good morning."
-                    android:textColor="@color/vio_text"
+                    android:textColor="?attr/vioText"
                     android:textSize="46sp" />
 
                 <TextView
@@ -67,10 +84,11 @@
                     android:layout_height="wrap_content"
                     android:layout_marginTop="12dp"
                     android:text="Search the web or type a URL"
-                    android:textColor="@color/vio_subtext"
+                    android:textColor="?attr/vioSubtext"
                     android:textSize="15sp" />
 
                 <LinearLayout
+                    android:id="@+id/homeSearchRow"
                     android:layout_width="match_parent"
                     android:layout_height="52dp"
                     android:layout_marginTop="20dp"
@@ -84,7 +102,7 @@
                         android:layout_width="20dp"
                         android:layout_height="20dp"
                         android:src="@drawable/ic_search"
-                        android:tint="@color/vio_subtext" />
+                        android:tint="?attr/vioSubtext" />
 
                     <EditText
                         android:id="@+id/homeSearch"
@@ -97,8 +115,8 @@
                         android:imeOptions="actionGo"
                         android:inputType="textUri"
                         android:maxLines="1"
-                        android:textColor="@color/vio_text"
-                        android:textColorHint="@color/vio_subtext"
+                        android:textColor="?attr/vioText"
+                        android:textColorHint="?attr/vioSubtext"
                         android:textSize="15sp" />
 
                     <ImageView
@@ -109,11 +127,12 @@
                         android:focusable="true"
                         android:padding="7dp"
                         android:src="@drawable/ic_qr"
-                        android:tint="@color/vio_accent" />
+                        android:tint="?attr/vioAccent" />
                 </LinearLayout>
 
                 <!-- Action tiles -->
                 <LinearLayout
+                    android:id="@+id/homeTiles"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:layout_marginTop="22dp"
@@ -139,7 +158,7 @@
                                 android:layout_height="22dp"
                                 android:layout_gravity="center"
                                 android:src="@drawable/ic_search"
-                                android:tint="@color/vio_accent" />
+                                android:tint="?attr/vioAccent" />
                         </FrameLayout>
 
                         <TextView
@@ -148,7 +167,7 @@
                             android:layout_marginTop="6dp"
                             android:gravity="center"
                             android:text="Go"
-                            android:textColor="@color/vio_subtext"
+                            android:textColor="?attr/vioSubtext"
                             android:textSize="11sp" />
                     </LinearLayout>
 
@@ -182,7 +201,7 @@
                             android:layout_marginTop="6dp"
                             android:gravity="center"
                             android:text="Rec"
-                            android:textColor="@color/vio_subtext"
+                            android:textColor="?attr/vioSubtext"
                             android:textSize="11sp" />
                     </LinearLayout>
 
@@ -207,7 +226,7 @@
                                 android:layout_height="20dp"
                                 android:layout_gravity="center"
                                 android:src="@drawable/ic_stop"
-                                android:tint="@color/vio_dark" />
+                                android:tint="?attr/vioDark" />
                         </FrameLayout>
 
                         <TextView
@@ -216,7 +235,7 @@
                             android:layout_marginTop="6dp"
                             android:gravity="center"
                             android:text="Stop"
-                            android:textColor="@color/vio_subtext"
+                            android:textColor="?attr/vioSubtext"
                             android:textSize="11sp" />
                     </LinearLayout>
 
@@ -241,7 +260,7 @@
                                 android:layout_height="22dp"
                                 android:layout_gravity="center"
                                 android:src="@drawable/ic_download"
-                                android:tint="@color/vio_accent" />
+                                android:tint="?attr/vioAccent" />
                         </FrameLayout>
 
                         <TextView
@@ -251,7 +270,7 @@
                             android:layout_marginTop="6dp"
                             android:gravity="center"
                             android:text="Download&#10;0"
-                            android:textColor="@color/vio_subtext"
+                            android:textColor="?attr/vioSubtext"
                             android:textSize="11sp" />
                     </LinearLayout>
                 </LinearLayout>
@@ -264,11 +283,12 @@
                     android:orientation="vertical">
 
                     <TextView
+                        android:id="@+id/shortcutsHeader"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:layout_marginTop="28dp"
                         android:text="Shortcuts"
-                        android:textColor="@color/vio_text"
+                        android:textColor="?attr/vioText"
                         android:textSize="16sp"
                         android:textStyle="bold" />
 
@@ -295,11 +315,12 @@
                         android:orientation="horizontal">
 
                         <TextView
+                            android:id="@+id/recentHeader"
                             android:layout_width="0dp"
                             android:layout_height="wrap_content"
                             android:layout_weight="1"
                             android:text="Recent"
-                            android:textColor="@color/vio_text"
+                            android:textColor="?attr/vioText"
                             android:textSize="16sp"
                             android:textStyle="bold" />
 
@@ -309,7 +330,7 @@
                             android:layout_height="wrap_content"
                             android:padding="4dp"
                             android:text="See all"
-                            android:textColor="@color/vio_accent"
+                            android:textColor="?attr/vioAccent"
                             android:textSize="13sp" />
                     </LinearLayout>
 
@@ -352,7 +373,7 @@
                     android:focusable="true"
                     android:padding="6dp"
                     android:src="@drawable/ic_tune"
-                    android:tint="@color/vio_subtext" />
+                    android:tint="?attr/vioSubtext" />
 
                 <TextView
                     android:id="@+id/privateBadge"
@@ -365,7 +386,7 @@
                     android:paddingEnd="8dp"
                     android:paddingBottom="2dp"
                     android:text="Private"
-                    android:textColor="@color/vio_surface"
+                    android:textColor="?attr/vioSurface"
                     android:textSize="11sp"
                     android:textStyle="bold"
                     android:visibility="gone" />
@@ -382,8 +403,8 @@
                     android:inputType="textUri"
                     android:maxLines="1"
                     android:selectAllOnFocus="true"
-                    android:textColor="@color/vio_text"
-                    android:textColorHint="@color/vio_subtext"
+                    android:textColor="?attr/vioText"
+                    android:textColorHint="?attr/vioSubtext"
                     android:textSize="14sp" />
 
                 <ImageView
@@ -395,7 +416,7 @@
                     android:focusable="true"
                     android:padding="6dp"
                     android:src="@drawable/ic_shield"
-                    android:tint="@color/vio_accent" />
+                    android:tint="?attr/vioAccent" />
 
                 <ImageView
                     android:id="@+id/btnTools"
@@ -406,7 +427,7 @@
                     android:focusable="true"
                     android:padding="6dp"
                     android:src="@drawable/ic_download"
-                    android:tint="@color/vio_accent" />
+                    android:tint="?attr/vioAccent" />
 
                 <ImageView
                     android:id="@+id/btnMenu"
@@ -417,7 +438,7 @@
                     android:focusable="true"
                     android:padding="6dp"
                     android:src="@drawable/ic_more"
-                    android:tint="@color/vio_text" />
+                    android:tint="?attr/vioText" />
 
                 <TextView
                     android:id="@+id/tabCount"
@@ -429,7 +450,7 @@
                     android:focusable="true"
                     android:gravity="center"
                     android:text="1"
-                    android:textColor="@color/vio_text"
+                    android:textColor="?attr/vioText"
                     android:textSize="12sp"
                     android:textStyle="bold" />
             </LinearLayout>
@@ -441,7 +462,7 @@
                 android:layout_width="match_parent"
                 android:layout_height="3dp"
                 android:max="100"
-                android:progressTint="@color/vio_accent"
+                android:progressTint="?attr/vioAccent"
                 android:visibility="gone" />
 
             <!-- Tab WebViews are added here in code. The detect card stays on top. -->
@@ -513,7 +534,7 @@
                                 android:layout_height="wrap_content"
                                 android:ellipsize="end"
                                 android:maxLines="1"
-                                android:textColor="@color/vio_text"
+                                android:textColor="?attr/vioText"
                                 android:textSize="14sp"
                                 android:textStyle="bold" />
 
@@ -524,7 +545,7 @@
                                 android:layout_marginTop="2dp"
                                 android:ellipsize="end"
                                 android:maxLines="1"
-                                android:textColor="@color/vio_subtext"
+                                android:textColor="?attr/vioSubtext"
                                 android:textSize="12sp" />
 
                             <TextView
@@ -534,7 +555,7 @@
                                 android:layout_marginTop="2dp"
                                 android:ellipsize="end"
                                 android:maxLines="1"
-                                android:textColor="@color/vio_accent"
+                                android:textColor="?attr/vioAccent"
                                 android:textSize="12sp"
                                 android:visibility="gone" />
                         </LinearLayout>
@@ -545,7 +566,7 @@
                             android:layout_height="32dp"
                             android:padding="8dp"
                             android:src="@drawable/ic_close"
-                            android:tint="@color/vio_subtext" />
+                            android:tint="?attr/vioSubtext" />
                     </LinearLayout>
 
                     <ProgressBar
@@ -555,7 +576,7 @@
                         android:layout_height="4dp"
                         android:layout_marginTop="10dp"
                         android:max="100"
-                        android:progressTint="@color/vio_accent"
+                        android:progressTint="?attr/vioAccent"
                         android:visibility="gone" />
 
                     <LinearLayout
@@ -575,7 +596,7 @@
                             android:focusable="true"
                             android:gravity="center"
                             android:text="Download"
-                            android:textColor="@color/vio_surface"
+                            android:textColor="?attr/vioOnAccent"
                             android:textSize="13sp"
                             android:textStyle="bold" />
 
@@ -589,7 +610,7 @@
                             android:focusable="true"
                             android:gravity="center"
                             android:text="Record"
-                            android:textColor="@color/vio_surface"
+                            android:textColor="?attr/vioSurface"
                             android:textSize="13sp"
                             android:textStyle="bold" />
                     </LinearLayout>
@@ -619,7 +640,7 @@
                     android:layout_gravity="start|center_vertical"
                     android:padding="8dp"
                     android:src="@drawable/ic_back"
-                    android:tint="@color/vio_text" />
+                    android:tint="?attr/vioText" />
 
                 <TextView
                     android:id="@+id/tabsTitle"
@@ -627,7 +648,7 @@
                     android:layout_height="wrap_content"
                     android:layout_gravity="center"
                     android:text="Tabs"
-                    android:textColor="@color/vio_text"
+                    android:textColor="?attr/vioText"
                     android:textSize="17sp"
                     android:textStyle="bold" />
 
@@ -638,7 +659,7 @@
                     android:layout_gravity="end|center_vertical"
                     android:padding="8dp"
                     android:text="Edit"
-                    android:textColor="@color/vio_accent"
+                    android:textColor="?attr/vioAccent"
                     android:textSize="14sp" />
             </FrameLayout>
 
@@ -656,7 +677,7 @@
                     android:layout_width="18dp"
                     android:layout_height="18dp"
                     android:src="@drawable/ic_search_small"
-                    android:tint="@color/vio_subtext" />
+                    android:tint="?attr/vioSubtext" />
 
                 <EditText
                     android:id="@+id/tabsSearch"
@@ -669,8 +690,8 @@
                     android:imeOptions="actionSearch"
                     android:inputType="text"
                     android:maxLines="1"
-                    android:textColor="@color/vio_text"
-                    android:textColorHint="@color/vio_subtext"
+                    android:textColor="?attr/vioText"
+                    android:textColorHint="?attr/vioSubtext"
                     android:textSize="14sp" />
             </LinearLayout>
 
@@ -698,7 +719,7 @@
                     android:paddingEnd="16dp"
                     android:paddingBottom="8dp"
                     android:text="All"
-                    android:textColor="@color/vio_surface"
+                    android:textColor="?attr/vioSurface"
                     android:textSize="13sp" />
 
                 <TextView
@@ -714,7 +735,7 @@
                     android:paddingEnd="16dp"
                     android:paddingBottom="8dp"
                     android:text="Normal"
-                    android:textColor="@color/vio_text"
+                    android:textColor="?attr/vioText"
                     android:textSize="13sp" />
 
                 <TextView
@@ -730,7 +751,7 @@
                     android:paddingEnd="16dp"
                     android:paddingBottom="8dp"
                     android:text="Private"
-                    android:textColor="@color/vio_text"
+                    android:textColor="?attr/vioText"
                     android:textSize="13sp" />
 
                 <TextView
@@ -746,7 +767,7 @@
                     android:paddingEnd="16dp"
                     android:paddingBottom="8dp"
                     android:text="Recent"
-                    android:textColor="@color/vio_text"
+                    android:textColor="?attr/vioText"
                     android:textSize="13sp" />
 
                 <TextView
@@ -761,7 +782,7 @@
                     android:paddingEnd="16dp"
                     android:paddingBottom="8dp"
                     android:text="Closed"
-                    android:textColor="@color/vio_text"
+                    android:textColor="?attr/vioText"
                     android:textSize="13sp" />
             </LinearLayout>
             </HorizontalScrollView>
@@ -798,7 +819,7 @@
                     android:focusable="true"
                     android:gravity="center"
                     android:text="+  New Tab"
-                    android:textColor="@color/vio_accent"
+                    android:textColor="?attr/vioAccent"
                     android:textSize="15sp"
                     android:textStyle="bold" />
 
@@ -812,7 +833,7 @@
                     android:focusable="true"
                     android:gravity="center"
                     android:text="Private"
-                    android:textColor="@color/vio_surface"
+                    android:textColor="?attr/vioSurface"
                     android:textSize="15sp"
                     android:textStyle="bold" />
             </LinearLayout>
@@ -840,7 +861,7 @@
                     android:layout_gravity="start|center_vertical"
                     android:padding="8dp"
                     android:src="@drawable/ic_back"
-                    android:tint="@color/vio_text" />
+                    android:tint="?attr/vioText" />
             </FrameLayout>
 
             <LinearLayout
@@ -860,7 +881,7 @@
                         android:layout_height="22dp"
                         android:layout_gravity="center"
                         android:src="@drawable/ic_download"
-                        android:tint="@color/vio_accent" />
+                        android:tint="?attr/vioAccent" />
                 </FrameLayout>
 
                 <TextView
@@ -869,7 +890,7 @@
                     android:layout_marginStart="12dp"
                     android:fontFamily="serif"
                     android:text="Download"
-                    android:textColor="@color/vio_text"
+                    android:textColor="?attr/vioText"
                     android:textSize="30sp" />
 
                 <TextView
@@ -883,7 +904,7 @@
                     android:paddingEnd="10dp"
                     android:paddingBottom="2dp"
                     android:text="0"
-                    android:textColor="@color/vio_accent"
+                    android:textColor="?attr/vioAccent"
                     android:textSize="13sp"
                     android:textStyle="bold" />
             </LinearLayout>
@@ -905,7 +926,7 @@
                     android:paddingStart="16dp"
                     android:paddingEnd="16dp"
                     android:text="Found"
-                    android:textColor="@color/vio_surface"
+                    android:textColor="?attr/vioSurface"
                     android:textSize="13sp" />
 
                 <TextView
@@ -920,7 +941,7 @@
                     android:paddingStart="16dp"
                     android:paddingEnd="16dp"
                     android:text="Saved"
-                    android:textColor="@color/vio_text"
+                    android:textColor="?attr/vioText"
                     android:textSize="13sp" />
             </LinearLayout>
 
@@ -937,7 +958,7 @@
                     android:layout_height="wrap_content"
                     android:layout_weight="1"
                     android:text="Detected videos on this page"
-                    android:textColor="@color/vio_subtext"
+                    android:textColor="?attr/vioSubtext"
                     android:textSize="14sp" />
 
                 <TextView
@@ -946,7 +967,7 @@
                     android:layout_height="wrap_content"
                     android:padding="4dp"
                     android:text="Select all"
-                    android:textColor="@color/vio_accent"
+                    android:textColor="?attr/vioAccent"
                     android:textSize="13sp" />
             </LinearLayout>
 
@@ -966,7 +987,7 @@
                     android:layout_weight="1"
                     android:ellipsize="end"
                     android:maxLines="1"
-                    android:textColor="@color/vio_subtext"
+                    android:textColor="?attr/vioSubtext"
                     android:textSize="12sp" />
 
                 <TextView
@@ -980,7 +1001,7 @@
                     android:paddingStart="12dp"
                     android:paddingEnd="12dp"
                     android:text="Pause all"
-                    android:textColor="@color/vio_text"
+                    android:textColor="?attr/vioText"
                     android:textSize="12sp" />
 
                 <TextView
@@ -995,7 +1016,7 @@
                     android:paddingStart="12dp"
                     android:paddingEnd="12dp"
                     android:text="Resume all"
-                    android:textColor="@color/vio_accent"
+                    android:textColor="?attr/vioAccent"
                     android:textSize="12sp" />
             </LinearLayout>
 
@@ -1028,7 +1049,7 @@
                             android:layout_width="18dp"
                             android:layout_height="18dp"
                             android:src="@drawable/ic_search_small"
-                            android:tint="@color/vio_subtext" />
+                            android:tint="?attr/vioSubtext" />
 
                         <EditText
                             android:id="@+id/libSearch"
@@ -1041,8 +1062,8 @@
                             android:imeOptions="actionSearch"
                             android:inputType="text"
                             android:maxLines="1"
-                            android:textColor="@color/vio_text"
-                            android:textColorHint="@color/vio_subtext"
+                            android:textColor="?attr/vioText"
+                            android:textColorHint="?attr/vioSubtext"
                             android:textSize="14sp" />
                     </LinearLayout>
 
@@ -1058,7 +1079,7 @@
                         android:paddingStart="12dp"
                         android:paddingEnd="12dp"
                         android:text="Newest"
-                        android:textColor="@color/vio_text"
+                        android:textColor="?attr/vioText"
                         android:textSize="12sp" />
                 </LinearLayout>
 
@@ -1093,7 +1114,7 @@
                         android:id="@+id/libStorageText"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:textColor="@color/vio_text"
+                        android:textColor="?attr/vioText"
                         android:textSize="12sp" />
 
                     <com.runit.webrecorder.StorageBar
@@ -1107,7 +1128,7 @@
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:layout_marginTop="6dp"
-                        android:textColor="@color/vio_subtext"
+                        android:textColor="?attr/vioSubtext"
                         android:textSize="11sp" />
                 </LinearLayout>
 
@@ -1127,7 +1148,7 @@
                         android:layout_weight="1"
                         android:ellipsize="end"
                         android:maxLines="1"
-                        android:textColor="@color/vio_subtext"
+                        android:textColor="?attr/vioSubtext"
                         android:textSize="12sp" />
 
                     <TextView
@@ -1141,7 +1162,7 @@
                         android:paddingStart="12dp"
                         android:paddingEnd="12dp"
                         android:text="Play all"
-                        android:textColor="@color/vio_accent"
+                        android:textColor="?attr/vioAccent"
                         android:textSize="12sp" />
 
                     <TextView
@@ -1156,7 +1177,7 @@
                         android:paddingStart="12dp"
                         android:paddingEnd="12dp"
                         android:text="Shuffle"
-                        android:textColor="@color/vio_accent"
+                        android:textColor="?attr/vioAccent"
                         android:textSize="12sp" />
 
                     <TextView
@@ -1171,7 +1192,7 @@
                         android:paddingStart="12dp"
                         android:paddingEnd="12dp"
                         android:text="+ New"
-                        android:textColor="@color/vio_accent"
+                        android:textColor="?attr/vioAccent"
                         android:textSize="12sp" />
                 </LinearLayout>
 
@@ -1202,7 +1223,7 @@
                         android:gravity="center"
                         android:lineSpacingMultiplier="1.2"
                         android:text="Nothing saved yet.&#10;Downloads and recordings show up here."
-                        android:textColor="@color/vio_subtext"
+                        android:textColor="?attr/vioSubtext"
                         android:textSize="14sp"
                         android:visibility="gone" />
                 </FrameLayout>
@@ -1236,7 +1257,7 @@
                     android:gravity="center"
                     android:lineSpacingMultiplier="1.2"
                     android:text="No videos detected yet.&#10;Play a video on the page and it will show up here."
-                    android:textColor="@color/vio_subtext"
+                    android:textColor="?attr/vioSubtext"
                     android:textSize="14sp"
                     android:visibility="gone" />
             </FrameLayout>
@@ -1253,7 +1274,7 @@
                 android:focusable="true"
                 android:gravity="center"
                 android:text="Download Selected (0)"
-                android:textColor="@color/vio_surface"
+                android:textColor="?attr/vioOnAccent"
                 android:textSize="15sp"
                 android:textStyle="bold" />
         </LinearLayout>
@@ -1280,7 +1301,7 @@
                     android:layout_height="wrap_content"
                     android:fontFamily="serif"
                     android:text="Settings"
-                    android:textColor="@color/vio_text"
+                    android:textColor="?attr/vioText"
                     android:textSize="34sp" />
 
             <TextView
@@ -1288,8 +1309,314 @@
                 android:layout_height="wrap_content"
                 android:layout_marginTop="14dp"
                 android:layout_marginBottom="8dp"
+                android:text="APPEARANCE"
+                android:textColor="?attr/vioAccent"
+                android:textSize="12sp"
+                android:textStyle="bold" />
+
+            <LinearLayout
+                android:id="@+id/rowTheme"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="8dp"
+                android:background="@drawable/bg_card"
+                android:clickable="true"
+                android:focusable="true"
+                android:gravity="center_vertical"
+                android:orientation="horizontal"
+                android:padding="14dp">
+
+                <LinearLayout
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:orientation="vertical">
+
+                    <TextView
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="Theme"
+                        android:textColor="?attr/vioText"
+                        android:textSize="15sp"
+                        android:textStyle="bold" />
+
+                    <TextView
+                        android:id="@+id/rowThemeSub"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="2dp"
+                        android:text="System default"
+                        android:textColor="?attr/vioSubtext"
+                        android:textSize="12sp" />
+                </LinearLayout>
+            </LinearLayout>
+
+            <LinearLayout
+                android:id="@+id/rowAccent"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="8dp"
+                android:background="@drawable/bg_card"
+                android:clickable="true"
+                android:focusable="true"
+                android:gravity="center_vertical"
+                android:orientation="horizontal"
+                android:padding="14dp">
+
+                <LinearLayout
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:orientation="vertical">
+
+                    <TextView
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="Accent colour"
+                        android:textColor="?attr/vioText"
+                        android:textSize="15sp"
+                        android:textStyle="bold" />
+
+                    <TextView
+                        android:id="@+id/rowAccentSub"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="2dp"
+                        android:text="Indigo"
+                        android:textColor="?attr/vioSubtext"
+                        android:textSize="12sp" />
+                </LinearLayout>
+            </LinearLayout>
+
+            <LinearLayout
+                android:id="@+id/rowWallpaper"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="8dp"
+                android:background="@drawable/bg_card"
+                android:clickable="true"
+                android:focusable="true"
+                android:gravity="center_vertical"
+                android:orientation="horizontal"
+                android:padding="14dp">
+
+                <LinearLayout
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:orientation="vertical">
+
+                    <TextView
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="Wallpaper"
+                        android:textColor="?attr/vioText"
+                        android:textSize="15sp"
+                        android:textStyle="bold" />
+
+                    <TextView
+                        android:id="@+id/rowWallpaperSub"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="2dp"
+                        android:text="None"
+                        android:textColor="?attr/vioSubtext"
+                        android:textSize="12sp" />
+                </LinearLayout>
+            </LinearLayout>
+
+            <LinearLayout
+                android:id="@+id/rowHomeLayout"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="8dp"
+                android:background="@drawable/bg_card"
+                android:clickable="true"
+                android:focusable="true"
+                android:gravity="center_vertical"
+                android:orientation="horizontal"
+                android:padding="14dp">
+
+                <LinearLayout
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:orientation="vertical">
+
+                    <TextView
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="Home page layout"
+                        android:textColor="?attr/vioText"
+                        android:textSize="15sp"
+                        android:textStyle="bold" />
+
+                    <TextView
+                        android:id="@+id/rowHomeLayoutSub"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="2dp"
+                        android:text="Classic"
+                        android:textColor="?attr/vioSubtext"
+                        android:textSize="12sp" />
+                </LinearLayout>
+            </LinearLayout>
+
+            <LinearLayout
+                android:id="@+id/rowToolbar"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="8dp"
+                android:background="@drawable/bg_card"
+                android:clickable="true"
+                android:focusable="true"
+                android:gravity="center_vertical"
+                android:orientation="horizontal"
+                android:padding="14dp">
+
+                <LinearLayout
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:orientation="vertical">
+
+                    <TextView
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="Toolbar"
+                        android:textColor="?attr/vioText"
+                        android:textSize="15sp"
+                        android:textStyle="bold" />
+
+                    <TextView
+                        android:id="@+id/rowToolbarSub"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="2dp"
+                        android:text="Address bar on top"
+                        android:textColor="?attr/vioSubtext"
+                        android:textSize="12sp" />
+                </LinearLayout>
+            </LinearLayout>
+
+            <LinearLayout
+                android:id="@+id/rowGestures"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="8dp"
+                android:background="@drawable/bg_card"
+                android:clickable="true"
+                android:focusable="true"
+                android:gravity="center_vertical"
+                android:orientation="horizontal"
+                android:padding="14dp">
+
+                <LinearLayout
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:orientation="vertical">
+
+                    <TextView
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="Gestures"
+                        android:textColor="?attr/vioText"
+                        android:textSize="15sp"
+                        android:textStyle="bold" />
+
+                    <TextView
+                        android:id="@+id/rowGesturesSub"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="2dp"
+                        android:text="Swipes and holds"
+                        android:textColor="?attr/vioSubtext"
+                        android:textSize="12sp" />
+                </LinearLayout>
+            </LinearLayout>
+
+            <LinearLayout
+                android:id="@+id/rowTextSize"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="8dp"
+                android:background="@drawable/bg_card"
+                android:clickable="true"
+                android:focusable="true"
+                android:gravity="center_vertical"
+                android:orientation="horizontal"
+                android:padding="14dp">
+
+                <LinearLayout
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:orientation="vertical">
+
+                    <TextView
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="Text size"
+                        android:textColor="?attr/vioText"
+                        android:textSize="15sp"
+                        android:textStyle="bold" />
+
+                    <TextView
+                        android:id="@+id/rowTextSizeSub"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="2dp"
+                        android:text="App and pages"
+                        android:textColor="?attr/vioSubtext"
+                        android:textSize="12sp" />
+                </LinearLayout>
+            </LinearLayout>
+
+            <LinearLayout
+                android:id="@+id/rowFonts"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="8dp"
+                android:background="@drawable/bg_card"
+                android:clickable="true"
+                android:focusable="true"
+                android:gravity="center_vertical"
+                android:orientation="horizontal"
+                android:padding="14dp">
+
+                <LinearLayout
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:orientation="vertical">
+
+                    <TextView
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="Fonts"
+                        android:textColor="?attr/vioText"
+                        android:textSize="15sp"
+                        android:textStyle="bold" />
+
+                    <TextView
+                        android:id="@+id/rowFontsSub"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="2dp"
+                        android:text="App and pages"
+                        android:textColor="?attr/vioSubtext"
+                        android:textSize="12sp" />
+                </LinearLayout>
+            </LinearLayout>
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="14dp"
+                android:layout_marginBottom="8dp"
                 android:text="PRIVACY (SHIELDS)"
-                android:textColor="@color/vio_accent"
+                android:textColor="?attr/vioAccent"
                 android:textSize="12sp"
                 android:textStyle="bold" />
 
@@ -1312,7 +1639,7 @@
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:text="Block ads and trackers"
-                        android:textColor="@color/vio_text"
+                        android:textColor="?attr/vioText"
                         android:textSize="15sp"
                         android:textStyle="bold" />
 
@@ -1321,7 +1648,7 @@
                         android:layout_height="wrap_content"
                         android:layout_marginTop="2dp"
                         android:text="Stops known ad and tracking servers. Per-site switch is the shield in the URL bar"
-                        android:textColor="@color/vio_subtext"
+                        android:textColor="?attr/vioSubtext"
                         android:textSize="12sp" />
                 </LinearLayout>
 
@@ -1351,7 +1678,7 @@
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:text="Upgrade to HTTPS"
-                        android:textColor="@color/vio_text"
+                        android:textColor="?attr/vioText"
                         android:textSize="15sp"
                         android:textStyle="bold" />
 
@@ -1360,7 +1687,7 @@
                         android:layout_height="wrap_content"
                         android:layout_marginTop="2dp"
                         android:text="Opens sites securely when they support it"
-                        android:textColor="@color/vio_subtext"
+                        android:textColor="?attr/vioSubtext"
                         android:textSize="12sp" />
                 </LinearLayout>
 
@@ -1390,7 +1717,7 @@
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:text="Block third-party cookies"
-                        android:textColor="@color/vio_text"
+                        android:textColor="?attr/vioText"
                         android:textSize="15sp"
                         android:textStyle="bold" />
 
@@ -1399,7 +1726,7 @@
                         android:layout_height="wrap_content"
                         android:layout_marginTop="2dp"
                         android:text="Stops other sites following you around"
-                        android:textColor="@color/vio_subtext"
+                        android:textColor="?attr/vioSubtext"
                         android:textSize="12sp" />
                 </LinearLayout>
 
@@ -1429,7 +1756,7 @@
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:text="Fingerprint protection"
-                        android:textColor="@color/vio_text"
+                        android:textColor="?attr/vioText"
                         android:textSize="15sp"
                         android:textStyle="bold" />
 
@@ -1438,7 +1765,7 @@
                         android:layout_height="wrap_content"
                         android:layout_marginTop="2dp"
                         android:text="Hides phone model and scrambles canvas data. May break a few sites"
-                        android:textColor="@color/vio_subtext"
+                        android:textColor="?attr/vioSubtext"
                         android:textSize="12sp" />
                 </LinearLayout>
 
@@ -1455,7 +1782,7 @@
                 android:layout_marginTop="14dp"
                 android:layout_marginBottom="8dp"
                 android:text="LOCK"
-                android:textColor="@color/vio_accent"
+                android:textColor="?attr/vioAccent"
                 android:textSize="12sp"
                 android:textStyle="bold" />
 
@@ -1478,7 +1805,7 @@
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:text="Lock the app"
-                        android:textColor="@color/vio_text"
+                        android:textColor="?attr/vioText"
                         android:textSize="15sp"
                         android:textStyle="bold" />
 
@@ -1487,7 +1814,7 @@
                         android:layout_height="wrap_content"
                         android:layout_marginTop="2dp"
                         android:text="Ask for fingerprint, face or phone PIN when opening Vio"
-                        android:textColor="@color/vio_subtext"
+                        android:textColor="?attr/vioSubtext"
                         android:textSize="12sp" />
                 </LinearLayout>
 
@@ -1517,7 +1844,7 @@
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:text="Lock private tabs"
-                        android:textColor="@color/vio_text"
+                        android:textColor="?attr/vioText"
                         android:textSize="15sp"
                         android:textStyle="bold" />
 
@@ -1526,7 +1853,7 @@
                         android:layout_height="wrap_content"
                         android:layout_marginTop="2dp"
                         android:text="Ask before opening private tabs"
-                        android:textColor="@color/vio_subtext"
+                        android:textColor="?attr/vioSubtext"
                         android:textSize="12sp" />
                 </LinearLayout>
 
@@ -1543,7 +1870,7 @@
                 android:layout_marginTop="14dp"
                 android:layout_marginBottom="8dp"
                 android:text="DOWNLOADS &amp; STORAGE"
-                android:textColor="@color/vio_accent"
+                android:textColor="?attr/vioAccent"
                 android:textSize="12sp"
                 android:textStyle="bold" />
 
@@ -1569,7 +1896,7 @@
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:text="Simultaneous downloads"
-                        android:textColor="@color/vio_text"
+                        android:textColor="?attr/vioText"
                         android:textSize="15sp"
                         android:textStyle="bold" />
 
@@ -1579,7 +1906,7 @@
                         android:layout_height="wrap_content"
                         android:layout_marginTop="2dp"
                         android:text="Tap to change"
-                        android:textColor="@color/vio_subtext"
+                        android:textColor="?attr/vioSubtext"
                         android:textSize="12sp" />
                 </LinearLayout>
             </LinearLayout>
@@ -1606,7 +1933,7 @@
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:text="Clear temporary files"
-                        android:textColor="@color/vio_text"
+                        android:textColor="?attr/vioText"
                         android:textSize="15sp"
                         android:textStyle="bold" />
 
@@ -1616,7 +1943,7 @@
                         android:layout_height="wrap_content"
                         android:layout_marginTop="2dp"
                         android:text="Leftovers from stopped downloads and vault previews"
-                        android:textColor="@color/vio_subtext"
+                        android:textColor="?attr/vioSubtext"
                         android:textSize="12sp" />
                 </LinearLayout>
             </LinearLayout>
@@ -1627,7 +1954,7 @@
                 android:layout_marginTop="14dp"
                 android:layout_marginBottom="8dp"
                 android:text="BROWSING"
-                android:textColor="@color/vio_accent"
+                android:textColor="?attr/vioAccent"
                 android:textSize="12sp"
                 android:textStyle="bold" />
 
@@ -1653,7 +1980,7 @@
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:text="Search engine"
-                        android:textColor="@color/vio_text"
+                        android:textColor="?attr/vioText"
                         android:textSize="15sp"
                         android:textStyle="bold" />
 
@@ -1663,7 +1990,7 @@
                         android:layout_height="wrap_content"
                         android:layout_marginTop="2dp"
                         android:text="Google"
-                        android:textColor="@color/vio_subtext"
+                        android:textColor="?attr/vioSubtext"
                         android:textSize="12sp" />
                 </LinearLayout>
             </LinearLayout>
@@ -1687,7 +2014,7 @@
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:text="Search suggestions"
-                        android:textColor="@color/vio_text"
+                        android:textColor="?attr/vioText"
                         android:textSize="15sp"
                         android:textStyle="bold" />
 
@@ -1696,7 +2023,7 @@
                         android:layout_height="wrap_content"
                         android:layout_marginTop="2dp"
                         android:text="Shows ideas under the address bar as you type"
-                        android:textColor="@color/vio_subtext"
+                        android:textColor="?attr/vioSubtext"
                         android:textSize="12sp" />
                 </LinearLayout>
 
@@ -1726,7 +2053,7 @@
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:text="Swipe to go back and forward"
-                        android:textColor="@color/vio_text"
+                        android:textColor="?attr/vioText"
                         android:textSize="15sp"
                         android:textStyle="bold" />
 
@@ -1735,7 +2062,7 @@
                         android:layout_height="wrap_content"
                         android:layout_marginTop="2dp"
                         android:text="Swipe in from the left or right edge of a page"
-                        android:textColor="@color/vio_subtext"
+                        android:textColor="?attr/vioSubtext"
                         android:textSize="12sp" />
                 </LinearLayout>
 
@@ -1765,7 +2092,7 @@
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:text="Pull down to refresh"
-                        android:textColor="@color/vio_text"
+                        android:textColor="?attr/vioText"
                         android:textSize="15sp"
                         android:textStyle="bold" />
 
@@ -1774,7 +2101,7 @@
                         android:layout_height="wrap_content"
                         android:layout_marginTop="2dp"
                         android:text="Drag a page down from the top to reload it"
-                        android:textColor="@color/vio_subtext"
+                        android:textColor="?attr/vioSubtext"
                         android:textSize="12sp" />
                 </LinearLayout>
 
@@ -1791,7 +2118,7 @@
                 android:layout_marginTop="14dp"
                 android:layout_marginBottom="8dp"
                 android:text="START PAGE"
-                android:textColor="@color/vio_accent"
+                android:textColor="?attr/vioAccent"
                 android:textSize="12sp"
                 android:textStyle="bold" />
 
@@ -1814,7 +2141,7 @@
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:text="Show shortcuts"
-                        android:textColor="@color/vio_text"
+                        android:textColor="?attr/vioText"
                         android:textSize="15sp"
                         android:textStyle="bold" />
 
@@ -1823,7 +2150,7 @@
                         android:layout_height="wrap_content"
                         android:layout_marginTop="2dp"
                         android:text="Your favourite sites as tiles"
-                        android:textColor="@color/vio_subtext"
+                        android:textColor="?attr/vioSubtext"
                         android:textSize="12sp" />
                 </LinearLayout>
 
@@ -1853,7 +2180,7 @@
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:text="Show recent pages"
-                        android:textColor="@color/vio_text"
+                        android:textColor="?attr/vioText"
                         android:textSize="15sp"
                         android:textStyle="bold" />
 
@@ -1862,7 +2189,7 @@
                         android:layout_height="wrap_content"
                         android:layout_marginTop="2dp"
                         android:text="The list of pages you visited lately"
-                        android:textColor="@color/vio_subtext"
+                        android:textColor="?attr/vioSubtext"
                         android:textSize="12sp" />
                 </LinearLayout>
 
@@ -1895,7 +2222,7 @@
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:text="Name in the greeting"
-                        android:textColor="@color/vio_text"
+                        android:textColor="?attr/vioText"
                         android:textSize="15sp"
                         android:textStyle="bold" />
 
@@ -1905,7 +2232,7 @@
                         android:layout_height="wrap_content"
                         android:layout_marginTop="2dp"
                         android:text="Not set"
-                        android:textColor="@color/vio_subtext"
+                        android:textColor="?attr/vioSubtext"
                         android:textSize="12sp" />
                 </LinearLayout>
             </LinearLayout>
@@ -1916,7 +2243,7 @@
                 android:layout_marginTop="14dp"
                 android:layout_marginBottom="8dp"
                 android:text="WEBSITES"
-                android:textColor="@color/vio_accent"
+                android:textColor="?attr/vioAccent"
                 android:textSize="12sp"
                 android:textStyle="bold" />
 
@@ -1942,7 +2269,7 @@
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:text="Website permissions"
-                        android:textColor="@color/vio_text"
+                        android:textColor="?attr/vioText"
                         android:textSize="15sp"
                         android:textStyle="bold" />
 
@@ -1952,7 +2279,7 @@
                         android:layout_height="wrap_content"
                         android:layout_marginTop="2dp"
                         android:text="Camera, microphone and location, site by site"
-                        android:textColor="@color/vio_subtext"
+                        android:textColor="?attr/vioSubtext"
                         android:textSize="12sp" />
                 </LinearLayout>
             </LinearLayout>
@@ -1973,7 +2300,7 @@
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:fontFamily="serif"
-                android:textColor="@color/vio_text"
+                android:textColor="?attr/vioText"
                 android:textSize="30sp" />
 
             <TextView
@@ -1981,7 +2308,7 @@
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="8dp"
-                android:textColor="@color/vio_subtext"
+                android:textColor="?attr/vioSubtext"
                 android:textSize="14sp" />
         </LinearLayout>
 
@@ -2014,13 +2341,13 @@
         android:id="@+id/navDivider"
         android:layout_width="match_parent"
         android:layout_height="1dp"
-        android:background="@color/vio_border" />
+        android:background="?attr/vioBorder" />
 
     <LinearLayout
         android:id="@+id/bottomNav"
         android:layout_width="match_parent"
         android:layout_height="64dp"
-        android:background="@color/vio_surface"
+        android:background="?attr/vioSurface"
         android:orientation="horizontal">
 
         <LinearLayout

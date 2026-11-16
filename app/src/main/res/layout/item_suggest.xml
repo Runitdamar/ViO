@@ -15,7 +15,7 @@
         android:layout_width="18dp"
         android:layout_height="18dp"
         android:src="@drawable/ic_search_small"
-        android:tint="@color/vio_subtext" />
+        android:tint="?attr/vioSubtext" />
 
     <TextView
         android:id="@+id/sugText"
@@ -25,7 +25,7 @@
         android:layout_weight="1"
         android:ellipsize="end"
         android:maxLines="1"
-        android:textColor="@color/vio_text"
+        android:textColor="?attr/vioText"
         android:textSize="14sp" />
 
     <TextView
@@ -36,6 +36,6 @@
         android:maxWidth="120dp"
         android:ellipsize="end"
         android:maxLines="1"
-        android:textColor="@color/vio_subtext"
+        android:textColor="?attr/vioSubtext"
         android:textSize="11sp" />
 </LinearLayout>

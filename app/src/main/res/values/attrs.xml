@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <attr name="vioBg" format="color" />
+    <attr name="vioSurface" format="color" />
+    <attr name="vioText" format="color" />
+    <attr name="vioSubtext" format="color" />
+    <attr name="vioBorder" format="color" />
+    <attr name="vioAvatar" format="color" />
+    <attr name="vioDark" format="color" />
+    <attr name="vioAccent" format="color" />
+    <attr name="vioOnAccent" format="color" />
+</resources>
